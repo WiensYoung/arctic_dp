@@ -1,0 +1,75 @@
+# SCI一区投稿实验配置模板。
+# full paper run 建议：seeds=30-100，controllers 包含强 baseline 与完整消融。
+protocol: sci1_submission_v2
+simulation:
+  loop: sim_loop_unified   # 统一使用 sim_loop (支持时变冰况 + 推进器分配)
+  ice_model: lindqvist_1989_proxy
+  thruster: generic_dp_vessel
+profiles:
+  smoke:
+    seeds: 2
+    duration_s: 20
+    dt_s: 0.2
+  paper:
+    seeds: 50
+    duration_s: 300
+    dt_s: 0.1
+controllers:
+  baselines:
+    - pid
+    - smc
+    - precision
+    - ice_aware
+  proposed:
+    - full
+  comparison:
+    - nmpc          # 需要 casadi; 不可用时自动跳过
+  ablations:
+    - no_cbf
+    - no_cvar
+    - no_observer
+    - no_fallback
+scenarios:
+  groups:
+    - A_precision          # 开阔水域基线 (无推进器分配)
+    - B_ice_enhancement    # 冰区增强 (含非平稳冰况)
+    - C_fault_tolerance    # 故障容错 (推进器退化)
+    - D_safety_degradation # 安全降级
+    - E_realtime           # 实时性
+    - F_miz               # 边缘冰区
+  thruster_configs:
+    A_precision: none
+    B_ice_enhancement: generic_dp
+    C_fault_tolerance: generic_dp
+    D_safety_degradation: generic_dp
+    E_realtime: generic_dp
+    F_miz: generic_dp
+  degradation:
+    C1_thruster_degradation_proxy: bow_degraded_0.5
+metrics:
+  primary:
+    - rms_position_error_m
+    - p95_position_error_m
+    - safety_violation_time_s
+    - thrust_saturation_ratio
+    - failure
+    - solver_time_p95_ms
+    - tail_position_cvar95_m
+  reporting:
+    ci: 0.95
+    quantiles: [0.50, 0.95, 0.99]
+  statistical_tests:
+    enabled: true
+    method: wilcoxon_rank_sum
+    alpha: 0.05
+    effect_size: cohens_d
+figures:
+  - fig_precision_safety_tradeoff
+  - fig_failure_probability
+  - fig_runtime_feasibility
+  - fig_tail_risk_actuator_stress
+  - fig_ablation_contribution
+  - fig_statistical_comparison
+provenance:
+  authoritative_data_manifest: data_manifest.json
+  note: "Raw NSIDC/Copernicus datasets are not bundled; record exact product version and access date in data_manifest.json."

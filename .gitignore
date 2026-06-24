@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data (large files should not be committed)
+data/sci1_sources/**/*.nc
+data/sci1_sources/**/*.zip
+data/sci1_sources/**/*.tar.gz
+data/sci1_sources/raw/
+
+# Results (generated, not source)
+results/
+!results/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
