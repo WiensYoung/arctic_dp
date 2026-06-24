@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arctic-quasi-dp"
+version = "0.2.0"
+description = "Arctic ice-region DP enhancement experiment platform for SCI-tier-1 submission"
+readme = "README_SCI1_EXPERIMENTS.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "WiensYoung"},
+]
+keywords = ["arctic", "dynamic-positioning", "ice-navigation", "control", "simulation"]
+
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "scipy>=1.10",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+nmpc = ["casadi>=3.6"]
+paper = ["casadi>=3.6", "pytest>=7.0"]
+
+[project.scripts]
+arctic-sci1 = "arctic_quasi_dp.sci1.runner:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

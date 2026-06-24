@@ -27,11 +27,30 @@ tests/sci1/test_sim_loop.py          # 仿真循环测试 (NEW)
 .gitignore
 ```
 
+## 安装
+
+```bash
+# 基础安装 (运行实验)
+pip install -e .
+
+# 安装测试依赖
+pip install -e ".[test]"
+
+# 安装 NMPC (需要 CasADi)
+pip install -e ".[nmpc]"
+
+# 安装全部依赖 (论文实验)
+pip install -e ".[paper]"
+```
+
 ## 快速运行 smoke 实验
 
 ```bash
-pip install -e .
-python scripts/run_sci1_experiments.py --profile smoke --seeds 2 --controllers pid precision ice_aware full no_cbf no_cvar no_observer no_fallback
+# 方式 1: 使用 console script (推荐)
+arctic-sci1 --profile smoke --seeds 2 --controllers pid precision ice_aware full no_cbf no_cvar no_observer no_fallback --no-traces
+
+# 方式 2: 使用 python -m
+python -m arctic_quasi_dp.sci1.runner --profile smoke --seeds 2 --controllers pid precision ice_aware full no_cbf no_cvar no_observer no_fallback --no-traces
 ```
 
 输出目录：
@@ -51,10 +70,7 @@ results/sci1_submission/<timestamp>/
 ## 论文正式实验建议
 
 ```bash
-python scripts/run_sci1_experiments.py \
-  --profile paper \
-  --seeds 50 \
-  --controllers pid smc precision ice_aware full no_cbf no_cvar no_observer no_fallback
+arctic-sci1 --profile paper --seeds 50 --controllers pid smc precision ice_aware full no_cbf no_cvar no_observer no_fallback
 ```
 
 建议服务器运行，不建议在笔记本上直接跑全部 `paper` profile。
