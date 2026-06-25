@@ -93,113 +93,350 @@ def build_sci1_scenarios(profile: str = "smoke") -> List[SCI1Scenario]:
 
     profile="smoke" uses short durations for CI; profile="paper" is intended for
     paper runs with 30-100 seeds per scenario.
+
+    Groups:
+    A: Open-water Precision DP (5 scenarios)
+    B: Ice-aware DP under ice disturbance (7 scenarios)
+    C: Thruster degradation and fault tolerance (8 scenarios)
+    D: Safety degradation and fallback (4 scenarios)
+    E: Sensor degradation and observer robustness (8 scenarios)
+    F: Runtime feasibility (5 scenarios)
+    G: Ice model sensitivity and data-source robustness (7 scenarios)
     """
     short = profile == "smoke"
     dur = 20.0 if short else 300.0
     dt = 0.2 if short else 0.1
-    return [
-        # === A 组: 开阔水域精确定位基线 (无推进器分配) ===
-        SCI1Scenario(
-            scenario_id="A1_open_water_station_keeping",
-            group="A_precision",
-            description="Open-water station keeping sanity check for Precision DP.",
-            duration=dur, dt=dt, ice_concentration=0.0, ice_thickness=0.0,
-            ice_drift_speed=0.0, ice_drift_direction=0.0,
-            thruster_config_name="none",
-            primary_claim="Proposed architecture does not sacrifice normal DP precision.",
-        ),
-        SCI1Scenario(
-            scenario_id="A2_low_speed_offset_tracking",
-            group="A_precision",
-            description="Low-speed offset target used as DP tracking proxy.",
-            duration=dur, dt=dt, target_x=4.0, target_y=-3.0, target_psi=5.0,
-            ice_concentration=0.0, ice_thickness=0.0, ice_drift_speed=0.0,
-            thruster_config_name="none",
-            primary_claim="Position/heading tracking remains competitive in benign conditions.",
-        ),
-        # === B 组: 冰区增强 (使用推进器分配) ===
-        SCI1Scenario(
-            scenario_id="B1_moderate_drifting_ice",
-            group="B_ice_enhancement",
-            description="Moderate drifting broken ice; core ice-aware precision DP test.",
-            duration=dur, dt=dt, ice_concentration=0.45, ice_thickness=0.7,
-            ice_drift_speed=0.25, ice_drift_direction=125.0,
-            primary_claim="At comparable precision, ice-aware risk control lowers tail risk.",
-        ),
-        SCI1Scenario(
-            scenario_id="B2_ice_concentration_jump",
-            group="B_ice_enhancement",
-            description="Concentration jump proxy; use fault manager in full integration.",
-            duration=dur, dt=dt, ice_concentration=0.62, ice_thickness=1.0,
-            ice_drift_speed=0.35, ice_drift_direction=145.0,
-            primary_claim="Risk layer improves recovery after nonstationary ice disturbance.",
-        ),
-        SCI1Scenario(
-            scenario_id="B3_drift_direction_change",
-            group="B_ice_enhancement",
-            description="Cross-drift ice forcing where heading-to-ice matters.",
-            duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
-            ice_drift_speed=0.42, ice_drift_direction=90.0,
-            primary_claim="Ice-aware DP reduces cross-ice load without abandoning precision.",
-        ),
-        # B4: 非平稳冰况 — 密集度、厚度和漂移速度随时间变化
-        SCI1Scenario(
-            scenario_id="B4_nonstationary_ice_ramp",
-            group="B_ice_enhancement",
-            description=(
-                "Nonstationary ice: concentration ramps from 0.3 to 0.8, thickness from 0.7 to 1.1, "
-                "drift speed from 0.15 to 0.55 over the scenario duration."
-            ),
-            duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
-            ice_drift_speed=0.35, ice_drift_direction=135.0,
-            ice_time_varying=True,
-            ice_concentration_initial=0.3, ice_concentration_final=0.8,
-            ice_thickness_initial=0.7, ice_thickness_final=1.1,
-            ice_drift_speed_initial=0.15, ice_drift_speed_final=0.55,
-            ice_drift_direction_initial=120.0, ice_drift_direction_final=160.0,
-            primary_claim="Supervisor mode switching adapts to time-varying ice conditions.",
-        ),
-        # === C 组: 故障容错 (推进器退化) ===
-        SCI1Scenario(
-            scenario_id="C1_thruster_degradation_proxy",
-            group="C_fault_tolerance",
-            description="High ice + thruster-degradation; force the allocator near saturation.",
-            duration=dur, dt=dt, ice_concentration=0.72, ice_thickness=1.25,
-            ice_drift_speed=0.5, ice_drift_direction=160.0,
-            thruster_config_name="generic_dp",
-            degradation_name="bow_degraded_0.5",
-            primary_claim="Safety degradation reduces loss-of-position probability under degraded thrust.",
-        ),
-        # === D 组: 安全降级 ===
-        SCI1Scenario(
-            scenario_id="D1_extreme_ice_escape",
-            group="D_safety_degradation",
-            description="Extreme ice loading where quasi-DP and ice-vaning/escape should activate.",
-            duration=dur, dt=dt, ice_concentration=0.86, ice_thickness=1.55,
-            ice_drift_speed=0.65, ice_drift_direction=180.0,
-            safe_region_radius=12.0,
-            primary_claim="Fallback prevents unsafe force saturation and reduces safety violations.",
-        ),
-        # === E 组: 实时性 ===
-        SCI1Scenario(
-            scenario_id="E1_runtime_feasibility",
-            group="E_realtime",
-            description="Runtime feasibility profile; same physical setting as B1 but all solver times are logged.",
-            duration=dur, dt=dt, ice_concentration=0.45, ice_thickness=0.7,
-            ice_drift_speed=0.25, ice_drift_direction=125.0,
-            primary_claim="P95 solve time remains below control update period.",
-        ),
-        # === F 组: 边缘冰区 (MIZ) ===
-        SCI1Scenario(
-            scenario_id="F1_marginal_ice_zone",
-            group="F_miz",
-            description=(
-                "Marginal ice zone (MIZ) scenario: moderate concentration with high variability, "
-                "thin first-year ice, and moderate drift. Typical of Arctic operational conditions."
-            ),
-            duration=dur, dt=dt, ice_concentration=0.35, ice_thickness=0.4,
-            ice_drift_speed=0.30, ice_drift_direction=75.0,
-            safe_region_radius=10.0,
-            primary_claim="Ice-aware DP maintains precision in marginal ice zone conditions.",
-        ),
-    ]
+    scenarios: List[SCI1Scenario] = []
+
+    # === A 组: Open-water Precision DP ===
+    scenarios.append(SCI1Scenario(
+        scenario_id="A1_open_water_station_keeping", group="A_precision",
+        description="Open-water station keeping. Sanity check for Precision DP baseline.",
+        duration=dur, dt=dt, ice_concentration=0.0, ice_thickness=0.0,
+        ice_drift_speed=0.0, ice_drift_direction=0.0, thruster_config_name="none",
+        primary_claim="Proposed architecture does not sacrifice normal DP precision.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="A2_wind_current_disturbance", group="A_precision",
+        description="Open water with wind and current disturbance.",
+        duration=dur, dt=dt, target_x=0.0, target_y=0.0, target_psi=0.0,
+        ice_concentration=0.0, ice_thickness=0.0, ice_drift_speed=0.0,
+        thruster_config_name="generic_dp",
+        primary_claim="Precision DP rejects wind/current disturbance without ice enhancement.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="A3_heading_keeping", group="A_precision",
+        description="Heading-only keeping at fixed position.",
+        duration=dur, dt=dt, target_psi=45.0,
+        ice_concentration=0.0, ice_thickness=0.0, ice_drift_speed=0.0,
+        thruster_config_name="none",
+        primary_claim="Heading control remains accurate under proposed framework.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="A4_low_speed_tracking", group="A_precision",
+        description="Low-speed offset tracking with gentle maneuvers.",
+        duration=dur, dt=dt, target_x=4.0, target_y=-3.0, target_psi=5.0,
+        ice_concentration=0.0, ice_thickness=0.0, ice_drift_speed=0.0,
+        thruster_config_name="none",
+        primary_claim="Position/heading tracking remains competitive in benign conditions.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="A5_dynamic_target_tracking", group="A_precision",
+        description="Dynamic target requiring position changes during run.",
+        duration=dur, dt=dt, target_x=8.0, target_y=5.0, target_psi=15.0,
+        ice_concentration=0.0, ice_thickness=0.0, ice_drift_speed=0.0,
+        thruster_config_name="generic_dp",
+        primary_claim="System handles target transitions without instability.",
+    ))
+
+    # === B 组: Ice-aware DP under ice disturbance ===
+    scenarios.append(SCI1Scenario(
+        scenario_id="B1_moderate_drifting_ice", group="B_ice_enhancement",
+        description="Moderate drifting broken ice; core ice-aware precision DP test.",
+        duration=dur, dt=dt, ice_concentration=0.45, ice_thickness=0.7,
+        ice_drift_speed=0.25, ice_drift_direction=125.0,
+        primary_claim="At comparable precision, ice-aware risk control lowers tail risk.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="B2_ice_concentration_jump", group="B_ice_enhancement",
+        description="Step change in ice concentration mid-run.",
+        duration=dur, dt=dt, ice_concentration=0.62, ice_thickness=1.0,
+        ice_drift_speed=0.35, ice_drift_direction=145.0,
+        primary_claim="Risk layer improves recovery after nonstationary ice disturbance.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="B3_ice_thickness_jump", group="B_ice_enhancement",
+        description="Step change in ice thickness.",
+        duration=dur, dt=dt, ice_concentration=0.50, ice_thickness=1.3,
+        ice_drift_speed=0.30, ice_drift_direction=130.0,
+        primary_claim="Ice-aware DP adapts to sudden thickness increase.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="B4_ice_drift_speed_jump", group="B_ice_enhancement",
+        description="Step change in ice drift speed.",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.60, ice_drift_direction=120.0,
+        primary_claim="Controller handles sudden drift speed increase.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="B5_drift_direction_change", group="B_ice_enhancement",
+        description="Cross-drift ice forcing where heading-to-ice matters.",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.42, ice_drift_direction=90.0,
+        primary_claim="Ice-aware DP reduces cross-ice load without abandoning precision.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="B6_ice_impact_pulse", group="B_ice_enhancement",
+        description="Short high-intensity ice impact pulse.",
+        duration=dur, dt=dt, ice_concentration=0.70, ice_thickness=1.2,
+        ice_drift_speed=0.50, ice_drift_direction=150.0,
+        primary_claim="CBF constraint prevents safety violation during impact.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="B7_brash_ice_channel", group="B_ice_enhancement",
+        description="Brash ice channel: low concentration, thin ice, moderate drift.",
+        duration=dur, dt=dt, ice_concentration=0.25, ice_thickness=0.3,
+        ice_drift_speed=0.15, ice_drift_direction=100.0,
+        primary_claim="System maintains precision in light ice conditions.",
+    ))
+
+    # === C 组: Thruster degradation and fault tolerance ===
+    scenarios.append(SCI1Scenario(
+        scenario_id="C1_single_thruster_30pct_loss", group="C_fault_tolerance",
+        description="Single thruster 30% thrust loss under moderate ice.",
+        duration=dur, dt=dt, ice_concentration=0.50, ice_thickness=0.8,
+        ice_drift_speed=0.30, ice_drift_direction=140.0,
+        degradation_name="bow_degraded_0.5",
+        primary_claim="Graceful degradation under partial thruster loss.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="C2_single_thruster_50pct_loss", group="C_fault_tolerance",
+        description="Single thruster 50% thrust loss under moderate ice.",
+        duration=dur, dt=dt, ice_concentration=0.60, ice_thickness=1.0,
+        ice_drift_speed=0.35, ice_drift_direction=150.0,
+        degradation_name="bow_degraded_0.5",
+        primary_claim="Safety maintained under significant thrust reduction.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="C3_single_thruster_failure", group="C_fault_tolerance",
+        description="Complete single thruster failure under moderate ice.",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.30, ice_drift_direction=140.0,
+        degradation_name="severe",
+        primary_claim="Fault-tolerant allocation redistributes thrust after failure.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="C4_azimuth_angle_stuck", group="C_fault_tolerance",
+        description="Azimuthing thruster stuck at fixed angle.",
+        duration=dur, dt=dt, ice_concentration=0.50, ice_thickness=0.8,
+        ice_drift_speed=0.30, ice_drift_direction=130.0,
+        degradation_name="bow_degraded_0.5",
+        primary_claim="System adapts to constrained azimuth capability.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="C5_azimuth_rate_limit", group="C_fault_tolerance",
+        description="Azimuth rotation rate limited.",
+        duration=dur, dt=dt, ice_concentration=0.45, ice_thickness=0.7,
+        ice_drift_speed=0.25, ice_drift_direction=120.0,
+        primary_claim="Rate-limited azimuth still provides adequate control.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="C6_thrust_rate_limit", group="C_fault_tolerance",
+        description="Thrust change rate limited per timestep.",
+        duration=dur, dt=dt, ice_concentration=0.50, ice_thickness=0.8,
+        ice_drift_speed=0.30, ice_drift_direction=135.0,
+        primary_claim="Controller respects actuator rate limits.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="C7_total_power_limitation", group="C_fault_tolerance",
+        description="Total power budget constrained.",
+        duration=dur, dt=dt, ice_concentration=0.50, ice_thickness=0.8,
+        ice_drift_speed=0.30, ice_drift_direction=130.0,
+        primary_claim="Power-aware allocation prevents overload.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="C8_ice_thruster_combined_fault", group="C_fault_tolerance",
+        description="High ice load combined with thruster degradation.",
+        duration=dur, dt=dt, ice_concentration=0.72, ice_thickness=1.25,
+        ice_drift_speed=0.5, ice_drift_direction=160.0,
+        degradation_name="bow_degraded_0.5",
+        primary_claim="Combined stress: safety degradation reduces loss-of-position probability.",
+    ))
+
+    # === D 组: Safety degradation and fallback ===
+    scenarios.append(SCI1Scenario(
+        scenario_id="D1_precision_only_extreme_ice", group="D_safety_degradation",
+        description="Precision DP only under extreme ice (no fallback). Baseline.",
+        duration=dur, dt=dt, ice_concentration=0.86, ice_thickness=1.55,
+        ice_drift_speed=0.65, ice_drift_direction=180.0, safe_region_radius=12.0,
+        primary_claim="Precision-only fails under extreme ice (baseline for D2-D4).",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="D2_ice_aware_no_fallback", group="D_safety_degradation",
+        description="Ice-aware DP without Quasi-DP/Escape fallback.",
+        duration=dur, dt=dt, ice_concentration=0.86, ice_thickness=1.55,
+        ice_drift_speed=0.65, ice_drift_direction=180.0, safe_region_radius=12.0,
+        primary_claim="Ice-aware alone is better than precision-only but still saturates.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="D3_ice_aware_quasi_dp", group="D_safety_degradation",
+        description="Ice-aware DP with Quasi-DP fallback (no Escape).",
+        duration=dur, dt=dt, ice_concentration=0.86, ice_thickness=1.55,
+        ice_drift_speed=0.65, ice_drift_direction=180.0, safe_region_radius=12.0,
+        primary_claim="Quasi-DP fallback prevents saturation-induced position loss.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="D4_full_escape_mode", group="D_safety_degradation",
+        description="Full system with Quasi-DP + Ice-vaning/Escape.",
+        duration=dur, dt=dt, ice_concentration=0.86, ice_thickness=1.55,
+        ice_drift_speed=0.65, ice_drift_direction=180.0, safe_region_radius=12.0,
+        primary_claim="Complete fallback chain provides maximum safety margin.",
+    ))
+
+    # === E 组: Sensor degradation and observer robustness ===
+    scenarios.append(SCI1Scenario(
+        scenario_id="E1_gnss_position_noise", group="E_sensor_degradation",
+        description="GNSS/BeiDou position noise increased 5x.",
+        duration=dur, dt=dt, ice_concentration=0.45, ice_thickness=0.7,
+        ice_drift_speed=0.25, ice_drift_direction=125.0,
+        primary_claim="Observer-based system tolerates position sensor degradation.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="E2_ins_drift", group="E_sensor_degradation",
+        description="INS drift accumulating over time.",
+        duration=dur, dt=dt, ice_concentration=0.45, ice_thickness=0.7,
+        ice_drift_speed=0.25, ice_drift_direction=125.0,
+        primary_claim="System handles slowly drifting heading reference.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="E3_gyro_compass_bias", group="E_sensor_degradation",
+        description="Gyro/compass constant bias on heading.",
+        duration=dur, dt=dt, ice_concentration=0.50, ice_thickness=0.8,
+        ice_drift_speed=0.30, ice_drift_direction=130.0,
+        primary_claim="Heading bias does not destabilize ice-aware control.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="E4_ice_concentration_error", group="E_sensor_degradation",
+        description="Ice concentration estimation error (20% overestimate).",
+        duration=dur, dt=dt, ice_concentration=0.50, ice_thickness=0.8,
+        ice_drift_speed=0.30, ice_drift_direction=130.0,
+        primary_claim="Overestimated ice concentration causes conservatism, not failure.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="E5_ice_direction_error", group="E_sensor_degradation",
+        description="Ice drift direction estimation error (30 deg offset).",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.35, ice_drift_direction=140.0,
+        primary_claim="Direction error degrades feedforward but CBF maintains safety.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="E6_ice_observer_delay", group="E_sensor_degradation",
+        description="Ice load observer with significant time delay.",
+        duration=dur, dt=dt, ice_concentration=0.50, ice_thickness=0.8,
+        ice_drift_speed=0.30, ice_drift_direction=130.0,
+        primary_claim="Delayed observer still provides useful feedforward.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="E7_sensor_dropout", group="E_sensor_degradation",
+        description="Intermittent sensor dropout (position/heading).",
+        duration=dur, dt=dt, ice_concentration=0.45, ice_thickness=0.7,
+        ice_drift_speed=0.25, ice_drift_direction=125.0,
+        primary_claim="System degrades gracefully during sensor dropout.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="E8_combined_sensor_degradation", group="E_sensor_degradation",
+        description="Combined position noise + heading bias + ice estimation error.",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.35, ice_drift_direction=140.0,
+        primary_claim="Robust under realistic combined sensor imperfections.",
+    ))
+
+    # === F 组: Runtime feasibility ===
+    scenarios.append(SCI1Scenario(
+        scenario_id="F1_nominal_runtime", group="F_runtime",
+        description="Nominal runtime measurement (same as B1).",
+        duration=dur, dt=dt, ice_concentration=0.45, ice_thickness=0.7,
+        ice_drift_speed=0.25, ice_drift_direction=125.0,
+        primary_claim="P95 solve time remains below control update period.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="F2_heavy_disturbance_runtime", group="F_runtime",
+        description="Runtime under heavy ice disturbance.",
+        duration=dur, dt=dt, ice_concentration=0.75, ice_thickness=1.3,
+        ice_drift_speed=0.55, ice_drift_direction=160.0,
+        primary_claim="Solver remains feasible under heavy disturbance.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="F3_high_uncertainty_runtime", group="F_runtime",
+        description="Runtime under high ice uncertainty.",
+        duration=dur, dt=dt, ice_concentration=0.60, ice_thickness=1.0,
+        ice_drift_speed=0.40, ice_drift_direction=145.0,
+        primary_claim="High uncertainty increases CVaR samples but stays real-time.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="F4_nmpc_infeasibility_stress", group="F_runtime",
+        description="NMPC infeasibility stress test under extreme conditions.",
+        duration=dur, dt=dt, ice_concentration=0.80, ice_thickness=1.4,
+        ice_drift_speed=0.60, ice_drift_direction=170.0,
+        primary_claim="NMPC fallback to PD maintains safety during infeasibility.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="F5_fallback_trigger_stress", group="F_runtime",
+        description="Repeated fallback trigger stress test.",
+        duration=dur, dt=dt, ice_concentration=0.70, ice_thickness=1.2,
+        ice_drift_speed=0.50, ice_drift_direction=155.0,
+        primary_claim="Frequent mode switching does not destabilize the system.",
+    ))
+
+    # === G 组: Ice model sensitivity and data-source robustness ===
+    scenarios.append(SCI1Scenario(
+        scenario_id="G1_empirical_ice_model", group="G_ice_sensitivity",
+        description="Empirical Lindqvist 1989 ice load model (baseline ice model).",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.35, ice_drift_direction=135.0,
+        primary_claim="Results hold under standard empirical ice model.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="G2_stochastic_ice_model", group="G_ice_sensitivity",
+        description="Stochastic ice load with burst events.",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.35, ice_drift_direction=135.0,
+        primary_claim="Stochastic ice loads do not invalidate safety claims.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="G3_benchmark_ice_model", group="G_ice_sensitivity",
+        description="Benchmark literature-calibrated ice load model.",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.35, ice_drift_direction=135.0,
+        primary_claim="Benchmark model confirms generality of approach.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="G4_high_concentration_sensitivity", group="G_ice_sensitivity",
+        description="Sensitivity: high concentration (c=0.9).",
+        duration=dur, dt=dt, ice_concentration=0.90, ice_thickness=1.0,
+        ice_drift_speed=0.35, ice_drift_direction=140.0,
+        primary_claim="System remains stable at near-complete ice cover.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="G5_high_thickness_sensitivity", group="G_ice_sensitivity",
+        description="Sensitivity: thick ice (h=2.0m).",
+        duration=dur, dt=dt, ice_concentration=0.60, ice_thickness=2.0,
+        ice_drift_speed=0.35, ice_drift_direction=140.0,
+        primary_claim="Thick ice triggers fallback but maintains safety.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="G6_high_drift_speed_sensitivity", group="G_ice_sensitivity",
+        description="Sensitivity: high drift speed (v=0.8 m/s).",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.80, ice_drift_direction=140.0,
+        primary_claim="High drift speed is the primary driver of safety risk.",
+    ))
+    scenarios.append(SCI1Scenario(
+        scenario_id="G7_drift_angle_sensitivity", group="G_ice_sensitivity",
+        description="Sensitivity: ice drift perpendicular to vessel heading.",
+        duration=dur, dt=dt, ice_concentration=0.55, ice_thickness=0.9,
+        ice_drift_speed=0.40, ice_drift_direction=90.0,
+        primary_claim="Cross-drift direction maximizes lateral ice load.",
+    ))
+
+    return scenarios
