@@ -171,12 +171,118 @@ def plot_statistical_comparison(comparison_csv: Path, out_dir: Path) -> None:
     _save(fig, out_dir / "fig_statistical_comparison")
 
 
+def plot_monte_carlo_ci(summary_csv: Path, out_dir: Path) -> None:
+    """Monte Carlo 置信区间图: mean ± CI95 for key metrics per controller."""
+    df = pd.read_csv(summary_csv)
+    metrics = ["rms_position_error_m", "p95_position_error_m", "safety_violation_time_s", "failure"]
+    available = [m for m in metrics if f"{m}_mean" in df.columns]
+    if not available:
+        return
+
+    controllers = df["controller"].unique()
+    fig, axes = plt.subplots(1, len(available), figsize=(4 * len(available), 5))
+    if len(available) == 1:
+        axes = [axes]
+
+    for ax, metric in zip(axes, available):
+        mean_col = f"{metric}_mean"
+        ci_col = f"{metric}_ci95"
+        means = []
+        cis = []
+        labels = []
+        for ctrl in controllers:
+            sub = df[df["controller"] == ctrl]
+            if len(sub) > 0:
+                m = sub[mean_col].mean()
+                c = sub[ci_col].mean() if ci_col in sub.columns else 0
+                means.append(m)
+                cis.append(c)
+                labels.append(ctrl)
+        x = np.arange(len(labels))
+        ax.errorbar(x, means, yerr=cis, fmt="o", capsize=4, markersize=5)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
+        ax.set_ylabel(metric.replace("_", " "))
+        ax.set_title(metric.replace("_", " "), fontsize=8)
+        ax.grid(axis="y", alpha=0.25)
+
+    fig.suptitle("Monte Carlo mean ± 95% CI", fontsize=10)
+    _save(fig, out_dir / "fig_monte_carlo_ci")
+
+
+def plot_thruster_stress(summary_csv: Path, out_dir: Path) -> None:
+    """推进器压力图: saturation, yaw saturation, energy, total variation."""
+    df = pd.read_csv(summary_csv)
+    metrics = ["thrust_saturation_ratio", "yaw_moment_saturation_ratio", "energy_proxy", "total_variation_of_control"]
+    available = [m for m in metrics if f"{m}_mean" in df.columns]
+    if not available:
+        return
+
+    fig, axes = plt.subplots(1, len(available), figsize=(4 * len(available), 5))
+    if len(available) == 1:
+        axes = [axes]
+
+    for ax, metric in zip(axes, available):
+        mean_col = f"{metric}_mean"
+        if mean_col not in df.columns:
+            continue
+        pivot = df.pivot_table(index="scenario_id", columns="controller", values=mean_col, aggfunc="mean")
+        pivot.plot(kind="bar", ax=ax, width=0.8, legend=False)
+        ax.set_ylabel(metric.replace("_", " "))
+        ax.set_title(metric.replace("_", " "), fontsize=8)
+        ax.tick_params(axis="x", labelrotation=45, labelsize=6)
+        ax.grid(axis="y", alpha=0.25)
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, fontsize=7, loc="upper right")
+    fig.suptitle("Thruster stress metrics", fontsize=10)
+    _save(fig, out_dir / "fig_thruster_stress")
+
+
+def plot_mode_switch_timeline(summary_csv: Path, out_dir: Path) -> None:
+    """模式切换图: mode ratio per controller across scenarios."""
+    df = pd.read_csv(summary_csv)
+    mode_cols = [c for c in df.columns if "mode_" in c and "_ratio" in c]
+    if not mode_cols:
+        return
+
+    controllers = df["controller"].unique()
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    bottom = np.zeros(len(controllers))
+    colors = ["#3498db", "#2ecc71", "#f39c12", "#e74c3c"]
+    mode_names = ["precision", "ice_aware", "quasi_dp", "escape"]
+
+    for i, mode in enumerate(mode_names):
+        col = f"mode_{mode}_ratio_mean"
+        if col not in df.columns:
+            continue
+        vals = []
+        for ctrl in controllers:
+            sub = df[df["controller"] == ctrl]
+            vals.append(sub[col].mean() if len(sub) > 0 else 0)
+        ax.bar(controllers, vals, bottom=bottom, label=mode, color=colors[i % len(colors)], alpha=0.85)
+        bottom += np.array(vals)
+
+    ax.set_ylabel("Mode ratio")
+    ax.set_title("Supervisor mode distribution per controller")
+    ax.legend(fontsize=8)
+    ax.grid(axis="y", alpha=0.25)
+    ax.tick_params(axis="x", labelrotation=35)
+    _save(fig, out_dir / "fig_mode_switch_timeline")
+
+
 def make_all_figures(summary_csv: Path, out_dir: Path, control_period_ms: float = 100.0) -> None:
+    """生成所有论文图表。"""
     plot_precision_safety_tradeoff(summary_csv, out_dir)
     plot_failure_rate(summary_csv, out_dir)
     plot_runtime(summary_csv, out_dir, control_period_ms=control_period_ms)
     plot_tail_risk(summary_csv, out_dir)
     plot_ablation_contribution(summary_csv, out_dir)
+    plot_monte_carlo_ci(summary_csv, out_dir)
+    plot_thruster_stress(summary_csv, out_dir)
+    plot_mode_switch_timeline(summary_csv, out_dir)
     # 统计比较图 (如果存在比较结果)
     comparison_csv = summary_csv.parent / "statistical_comparisons.csv"
     plot_statistical_comparison(comparison_csv, out_dir)
