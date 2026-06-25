@@ -21,14 +21,17 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
+import warnings
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
+import yaml
 
 from ..controllers.pid import PIDController, PIDParams
 try:
@@ -293,28 +296,138 @@ def run_experiments(
     return out_dir
 
 
+# ---------- YAML 配置加载 ----------
+
+_KNOWN_CONFIG_KEYS = {
+    "profile", "seeds", "controllers", "output", "runtime",
+    "scenarios", "protocol", "simulation", "vessel",
+}
+
+
+def load_yaml_config(config_path: Path) -> Dict[str, Any]:
+    """加载 YAML 配置文件。"""
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    if not isinstance(cfg, dict):
+        raise ValueError(f"Config file must be a YAML mapping, got {type(cfg)}")
+    return cfg
+
+
+def _check_unknown_keys(cfg: Dict[str, Any], strict: bool = True) -> None:
+    """检查未知配置键。"""
+    unknown = set(cfg.keys()) - _KNOWN_CONFIG_KEYS
+    if unknown:
+        msg = f"Unknown config keys: {unknown}"
+        if strict:
+            raise ValueError(msg)
+        warnings.warn(msg)
+
+
+def _config_hash(cfg: Dict[str, Any]) -> str:
+    """计算配置的 SHA256 hash。"""
+    raw = json.dumps(cfg, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]
+
+
+def merge_config(yaml_cfg: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
+    """合并 YAML 配置和 CLI 参数。CLI 参数优先 (None 表示未指定)。"""
+    cfg = dict(yaml_cfg)
+
+    # CLI 覆盖 (None = 未指定, 使用 YAML 值)
+    if args.profile is not None:
+        cfg["profile"] = args.profile
+    elif "profile" not in cfg:
+        cfg["profile"] = "smoke"
+
+    if args.seeds is not None:
+        cfg["seeds"] = args.seeds
+    elif "seeds" not in cfg:
+        cfg["seeds"] = 2
+
+    if args.controllers is not None:
+        cfg["controllers"] = args.controllers
+    elif "controllers" not in cfg:
+        cfg["controllers"] = [
+            "pid", "precision", "ice_aware", "full", "nmpc",
+            "no_cbf", "no_cvar", "no_observer", "no_fallback",
+        ]
+
+    if args.no_traces:
+        if "output" not in cfg:
+            cfg["output"] = {}
+        cfg["output"]["save_traces"] = False
+
+    if args.out is not None:
+        if "output" not in cfg:
+            cfg["output"] = {}
+        cfg["output"]["root"] = str(args.out)
+
+    return cfg
+
+
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
-    # 默认控制器列表 (NMPC 在列，不可用时自动跳过)
-    default_controllers = [
-        "pid", "precision", "ice_aware", "full", "nmpc",
-        "no_cbf", "no_cvar", "no_observer", "no_fallback",
-    ]
     parser = argparse.ArgumentParser(description="Run SCI一区投稿级冰区 DP 实验矩阵")
-    parser.add_argument("--profile", choices=["smoke", "paper"], default="smoke")
-    parser.add_argument("--seeds", type=int, default=2, help="Smoke: 1-3; paper: 30-100")
-    parser.add_argument("--controllers", nargs="+", default=default_controllers)
+    parser.add_argument("--config", type=Path, default=None, help="YAML config file")
+    parser.add_argument("--profile", choices=["smoke", "paper"], default=None)
+    parser.add_argument("--seeds", type=int, default=None, help="Smoke: 1-3; paper: 30-100")
+    parser.add_argument("--controllers", nargs="+", default=None)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--no-traces", action="store_true")
+    parser.add_argument("--strict", action="store_true", default=True,
+                        help="Strict mode: error on unknown config keys (default: True)")
     return parser.parse_args(argv)
 
 
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out = args.out or Path("results") / "sci1_submission" / f"{args.profile}_{stamp}"
+
+    # 加载 YAML 配置 (如果有)
+    yaml_cfg: Dict[str, Any] = {}
+    if args.config is not None:
+        yaml_cfg = load_yaml_config(args.config)
+        _check_unknown_keys(yaml_cfg, strict=args.strict)
+
+    # 合并配置
+    cfg = merge_config(yaml_cfg, args)
+
+    profile = cfg.get("profile", "smoke")
+    seeds = int(cfg.get("seeds", 2))
+    controllers = cfg.get("controllers", [
+        "pid", "precision", "ice_aware", "full", "nmpc",
+        "no_cbf", "no_cvar", "no_observer", "no_fallback",
+    ])
+    output_cfg = cfg.get("output", {})
+    save_traces = output_cfg.get("save_traces", True)
+    save_figures = output_cfg.get("save_figures", True)
+
+    # 输出目录
+    if args.out is not None:
+        out = args.out
+    elif "root" in output_cfg:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out = Path(output_cfg["root"]) / f"{profile}_{stamp}"
+    else:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out = Path("results") / "sci1_submission" / f"{profile}_{stamp}"
+
+    # 保存 effective config
+    out.mkdir(parents=True, exist_ok=True)
+    effective_cfg = {
+        "profile": profile,
+        "seeds": seeds,
+        "controllers": controllers,
+        "output": {"root": str(out), "save_traces": save_traces, "save_figures": save_figures},
+        "config_hash": _config_hash(cfg),
+        "source_config": str(args.config) if args.config else "cli_only",
+    }
+    (out / "effective_config.json").write_text(
+        json.dumps(effective_cfg, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
     result_dir = run_experiments(
-        args.profile, args.seeds, args.controllers, out,
-        save_traces=not args.no_traces,
+        profile, seeds, controllers, out,
+        save_traces=save_traces,
     )
     print(f"SCI1 experiment outputs written to: {result_dir}")
     return 0
