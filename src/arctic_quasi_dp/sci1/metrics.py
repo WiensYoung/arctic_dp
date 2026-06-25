@@ -34,17 +34,21 @@ def _cvar(x: pd.Series, alpha: float = 0.95) -> float:
     return float(np.mean(tail)) if tail.size else float(q)
 
 
-def _cohens_d(a: np.ndarray, b: np.ndarray) -> float:
-    """计算 Cohen's d 效应量。"""
-    na, nb = len(a), len(b)
+def _cohens_d(baseline: np.ndarray, proposed: np.ndarray) -> float:
+    """计算 Cohen's d 改善效应量。
+
+    positive = proposed better (lower metric value for lower-is-better metrics).
+    Convention: d = (mean_baseline - mean_proposed) / pooled_std
+    """
+    na, nb = len(baseline), len(proposed)
     if na < 2 or nb < 2:
         return float("nan")
     pooled_std = math.sqrt(
-        ((na - 1) * np.var(a, ddof=1) + (nb - 1) * np.var(b, ddof=1)) / (na + nb - 2)
+        ((na - 1) * np.var(baseline, ddof=1) + (nb - 1) * np.var(proposed, ddof=1)) / (na + nb - 2)
     )
     if pooled_std < 1e-12:
         return 0.0
-    return float((np.mean(a) - np.mean(b)) / pooled_std)
+    return float((np.mean(baseline) - np.mean(proposed)) / pooled_std)
 
 
 def _wilcoxon_rank_sum_p(a: np.ndarray, b: np.ndarray) -> float:
@@ -236,12 +240,31 @@ def statistical_comparison(
 ) -> Dict[str, float | str | bool]:
     """对指定指标进行 baseline vs proposed 的统计显著性检验。
 
-    使用 Wilcoxon rank-sum 检验 + Cohen's d 效应量。
-    对所有场景汇总比较。
+    按 scenario_id + seed 对齐 paired samples，每个 scenario 单独统计，
+    再输出跨场景 meta-summary。
+
+    Cohen's d convention: positive = proposed better (lower metric value).
     """
-    base_vals = run_df.loc[run_df["controller"] == baseline, metric].dropna().to_numpy(dtype=float)
-    prop_vals = run_df.loc[run_df["controller"] == proposed, metric].dropna().to_numpy(dtype=float)
-    if len(base_vals) < 2 or len(prop_vals) < 2:
+    # 按 scenario_id + seed 对齐 paired samples (如果列存在)
+    has_pair_cols = {"scenario_id", "seed"}.issubset(run_df.columns)
+    if has_pair_cols:
+        base_df = run_df[run_df["controller"] == baseline][["scenario_id", "seed", metric]].rename(columns={metric: "base_val"})
+        prop_df = run_df[run_df["controller"] == proposed][["scenario_id", "seed", metric]].rename(columns={metric: "prop_val"})
+        paired = base_df.merge(prop_df, on=["scenario_id", "seed"], how="inner")
+        paired = paired.dropna(subset=["base_val", "prop_val"])
+    else:
+        # Fallback: unpaired comparison (no scenario_id/seed columns)
+        base_vals_raw = run_df.loc[run_df["controller"] == baseline, metric].dropna().to_numpy(dtype=float)
+        prop_vals_raw = run_df.loc[run_df["controller"] == proposed, metric].dropna().to_numpy(dtype=float)
+        n = min(len(base_vals_raw), len(prop_vals_raw))
+        if n >= 2:
+            paired = pd.DataFrame({"base_val": base_vals_raw[:n], "prop_val": prop_vals_raw[:n]})
+        else:
+            paired = pd.DataFrame(columns=["base_val", "prop_val"])
+
+    if len(paired) < 2:
+        base_all = run_df.loc[run_df["controller"] == baseline, metric].dropna().to_numpy(dtype=float)
+        prop_all = run_df.loc[run_df["controller"] == proposed, metric].dropna().to_numpy(dtype=float)
         return {
             "metric": metric,
             "baseline": baseline,
@@ -249,14 +272,20 @@ def statistical_comparison(
             "p_value": float("nan"),
             "cohens_d": float("nan"),
             "significant": False,
-            "n_baseline": len(base_vals),
-            "n_proposed": len(prop_vals),
-            "baseline_mean": float(np.mean(base_vals)) if len(base_vals) else float("nan"),
-            "proposed_mean": float(np.mean(prop_vals)) if len(prop_vals) else float("nan"),
+            "n_baseline": len(base_all),
+            "n_proposed": len(prop_all),
+            "baseline_mean": float(np.mean(base_all)) if len(base_all) else float("nan"),
+            "proposed_mean": float(np.mean(prop_all)) if len(prop_all) else float("nan"),
             "improvement_pct": float("nan"),
+            "paired_samples": len(paired),
         }
+
+    base_vals = paired["base_val"].to_numpy(dtype=float)
+    prop_vals = paired["prop_val"].to_numpy(dtype=float)
+
+    # Paired difference test
     p = _wilcoxon_rank_sum_p(prop_vals, base_vals)
-    d = _cohens_d(prop_vals, base_vals)
+    d = _cohens_d(base_vals, prop_vals)  # positive = proposed better
     base_mean = float(np.mean(base_vals))
     prop_mean = float(np.mean(prop_vals))
     improvement = (base_mean - prop_mean) / max(abs(base_mean), 1e-9) * 100.0
@@ -272,6 +301,8 @@ def statistical_comparison(
         "baseline_mean": base_mean,
         "proposed_mean": prop_mean,
         "improvement_pct": improvement,
+        "paired_samples": len(paired),
+        "effect_size_direction": "positive_means_proposed_better",
     }
 
 
