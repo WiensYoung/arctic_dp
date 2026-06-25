@@ -173,19 +173,23 @@ class NMPCIceController(BaseController):
         dt = p.dt_nmpc
 
         # 符号变量
-        # 状态: [x, y, psi, u, v, r]
-        x = cs.MX.sym("x", 6)
-        # 控制输入: [Fx, Fy, Mz]
-        tau = cs.MX.sym("tau", 3)
-        # 参数: [x_ref, y_ref, psi_ref, ice_c, ice_h, ice_v, ice_dir, prev_Fx, prev_Fy, prev_Mz]
-        param = cs.MX.sym("param", 10)
+        # 参数: [x_ref, y_ref, psi_ref, ice_c, ice_h, ice_v, ice_dir,
+        #        prev_Fx, prev_Fy, prev_Mz,
+        #        eta_x, eta_y, psi, u, v, r]
+        param = cs.MX.sym("param", 16)
 
         # 状态和控制的符号序列
         X = cs.MX.sym("X", 6, N + 1)
         U = cs.MX.sym("U", 3, N)
 
-        # 动力学函数 (连续)
-        def dynamics(xk, tau_k, ice_fx, ice_fy, ice_mz):
+        # 从参数提取冰况 (常量符号)
+        ice_c = param[3]
+        ice_h = param[4]
+        ice_v = param[5]
+        ice_dir = param[6]
+
+        # 动力学函数 (连续), 冰力按当前状态 psi 计算
+        def dynamics(xk, tau_k):
             psi = xk[2]
             u_body = xk[3]
             v_body = xk[4]
@@ -198,6 +202,11 @@ class NMPCIceController(BaseController):
             xdot_ned = cpsi * u_body - spsi * v_body
             ydot_ned = spsi * u_body + cpsi * v_body
 
+            # 冰力 (基于当前步的 heading)
+            ice_fx, ice_fy, ice_mz = _ice_force_symbolic(
+                ice_c, ice_h, ice_v, ice_dir, psi, p
+            )
+
             # 船体动力学 (含阻尼和冰力)
             u_dot = (tau_k[0] + ice_fx - p.Xu * u_body - p.Xu_abs * cs.fabs(u_body) * u_body) / p.mass
             v_dot = (tau_k[1] + ice_fy - p.Yv * v_body - p.Yv_abs * cs.fabs(v_body) * v_body) / p.mass
@@ -205,25 +214,12 @@ class NMPCIceController(BaseController):
 
             return cs.vertcat(xdot_ned, ydot_ned, r, u_dot, v_dot, r_dot)
 
-        # 冰力 (符号)
-        ice_c = param[3]
-        ice_h = param[4]
-        ice_v = param[5]
-        ice_dir = param[6]
-        psi_sym = x[2]
-        ice_fx, ice_fy, ice_mz = _ice_force_symbolic(
-            ice_c, ice_h, ice_v, ice_dir, psi_sym, p
-        )
-
-        # 连续动力学
-        xdot = dynamics(x, tau, ice_fx, ice_fy, ice_mz)
-
         # 离散化 (RK4)
         def rk4_step(xk, uk):
-            k1 = dynamics(xk, uk, ice_fx, ice_fy, ice_mz)
-            k2 = dynamics(xk + 0.5 * dt * k1, uk, ice_fx, ice_fy, ice_mz)
-            k3 = dynamics(xk + 0.5 * dt * k2, uk, ice_fx, ice_fy, ice_mz)
-            k4 = dynamics(xk + dt * k3, uk, ice_fx, ice_fy, ice_mz)
+            k1 = dynamics(xk, uk)
+            k2 = dynamics(xk + 0.5 * dt * k1, uk)
+            k3 = dynamics(xk + 0.5 * dt * k2, uk)
+            k4 = dynamics(xk + dt * k3, uk)
             return xk + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
 
         # 构建 NLP
@@ -234,8 +230,9 @@ class NMPCIceController(BaseController):
         lbg = []
         ubg = []
 
-        # 初始状态约束
-        g.append(X[:, 0] - x)
+        # 初始状态约束 (从参数向量提取当前状态)
+        x0_param = param[10:16]
+        g.append(X[:, 0] - x0_param)
         lbg.extend([0.0] * 6)
         ubg.extend([0.0] * 6)
 
@@ -285,8 +282,8 @@ class NMPCIceController(BaseController):
             vel_ned_y = cs.sin(X[2, k]) * X[3, k] + cs.cos(X[2, k]) * X[4, k]
             h_dot = -2.0 * (pos_err_x * vel_ned_x + pos_err_y * vel_ned_y)
             g.append(h_dot + p.cbf_gamma * h_val)
-            lbg.append(-1e20)
-            ubg.append(0.0)
+            lbg.append(0.0)
+            ubg.append(1e20)
 
         # 终端代价
         pos_err_x_T = X[0, N] - param[0]
@@ -361,8 +358,11 @@ class NMPCIceController(BaseController):
         p = self.params
 
         # 构建参数向量
-        # [x_ref, y_ref, psi_ref, ice_c, ice_h, ice_v, ice_dir, prev_Fx, prev_Fy, prev_Mz]
+        # [x_ref, y_ref, psi_ref, ice_c, ice_h, ice_v, ice_dir,
+        #  prev_Fx, prev_Fy, prev_Mz,
+        #  eta_x, eta_y, psi, u, v, r]
         ice = self._ice_est
+        x0 = np.asarray(state, dtype=np.float64).reshape(6,)
         param_val = np.array([
             self._target_pos[0],
             self._target_pos[1],
@@ -374,6 +374,7 @@ class NMPCIceController(BaseController):
             self._prev_tau[0],
             self._prev_tau[1],
             self._prev_tau[2],
+            x0[0], x0[1], x0[2], x0[3], x0[4], x0[5],
         ], dtype=np.float64)
 
         # 初始猜测: 状态保持 + 零控制
@@ -425,7 +426,7 @@ class NMPCIceController(BaseController):
             tau = self._fallback_pd(state)
             feasible = False
 
-        tau = np.clip(tau, -p.max_force, p.max_force)
+        tau[0:2] = np.clip(tau[0:2], -p.max_force, p.max_force)
         tau[2] = np.clip(tau[2], -p.max_moment, p.max_moment)
 
         self._prev_tau = tau.copy()
@@ -488,7 +489,9 @@ class NMPCIceController(BaseController):
         mz = -Kh * e_psi - Kr * r
 
         tau = np.array([fx, fy, mz])
-        return np.clip(tau, -p.max_force, p.max_force)
+        tau[0:2] = np.clip(tau[0:2], -p.max_force, p.max_force)
+        tau[2] = np.clip(tau[2], -p.max_moment, p.max_moment)
+        return tau
 
     def reset(self) -> None:
         self._prev_tau = np.zeros(3, dtype=np.float64)
