@@ -214,7 +214,11 @@ class ThrusterAllocator:
         # 5. 检查可行性
         actual_tau = self.resulting_tau(u)
         tau_err = np.linalg.norm(tau_desired - actual_tau)
-        feasible = tau_err < 0.3 * np.linalg.norm(tau_desired)
+        tau_norm = np.linalg.norm(tau_desired)
+        if tau_norm < 1e-6:
+            feasible = True  # zero desired tau is always feasible
+        else:
+            feasible = tau_err < 0.3 * tau_norm
 
         return u, feasible
 

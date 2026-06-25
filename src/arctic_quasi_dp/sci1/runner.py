@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 from pathlib import Path
@@ -156,15 +157,17 @@ def _make_ice_schedule(scenario: SCI1Scenario):
 # ---------- 推进器配置 ----------
 
 def _get_thruster_config(scenario: SCI1Scenario):
-    """从场景获取推进器配置。"""
+    """从场景获取推进器配置 (deep copy 防止跨 run 污染)。"""
     name = getattr(scenario, 'thruster_config_name', 'generic_dp')
-    return _THRUSTER_CONFIGS.get(name)
+    cfg = _THRUSTER_CONFIGS.get(name)
+    return copy.deepcopy(cfg) if cfg is not None else None
 
 
 def _get_degradation_profile(scenario: SCI1Scenario):
-    """从场景获取推进器退化配置。"""
+    """从场景获取推进器退化配置 (deep copy 防止跨 run 污染)。"""
     name = getattr(scenario, 'degradation_name', 'no_fault')
-    return _DEGRADATION_PROFILES.get(name, _DEGRADATION_PROFILES["no_fault"])
+    prof = _DEGRADATION_PROFILES.get(name, _DEGRADATION_PROFILES["no_fault"])
+    return copy.deepcopy(prof)
 
 
 # ---------- 元数据 ----------
