@@ -183,6 +183,52 @@ def summarize_run(
         or (solver_success.mean() < 0.90)
     )
 
+    # Yaw moment saturation (separate from Fx/Fy)
+    tau_n_col = _find_column(df, ["tau_n", "tau_cmd_n", "tau_mz"], None)
+    yaw_saturation = 0.0
+    if tau_n_col:
+        tau_n = np.abs(pd.to_numeric(df[tau_n_col], errors="coerce").dropna().to_numpy(dtype=float))
+        if len(tau_n) > 0:
+            max_moment = 20000.0  # Default max moment
+            yaw_saturation = float(np.mean(tau_n > 0.95 * max_moment))
+
+    # Total variation of control
+    tau_x_col = _find_column(df, ["tau_x", "tau_cmd_x"], None)
+    tau_y_col = _find_column(df, ["tau_y", "tau_cmd_y"], None)
+    total_variation = 0.0
+    if tau_x_col and tau_y_col:
+        tau_x = pd.to_numeric(df[tau_x_col], errors="coerce").fillna(0).to_numpy()
+        tau_y = pd.to_numeric(df[tau_y_col], errors="coerce").fillna(0).to_numpy()
+        if len(tau_x) > 1:
+            dx = np.diff(tau_x)
+            dy = np.diff(tau_y)
+            total_variation = float(np.sum(np.sqrt(dx**2 + dy**2)))
+
+    # Solver time mean
+    solver_time_mean = float(solve_ms.mean()) if len(solve_ms) > 0 else float("nan")
+
+    # Mode switching metrics
+    mode_col = _find_column(df, ["supervisor_mode", "mode"], None)
+    mode_switch_count = 0
+    mode_ratios = {}
+    if mode_col:
+        modes = pd.to_numeric(df[mode_col], errors="coerce").fillna(0).to_numpy()
+        if len(modes) > 1:
+            mode_switch_count = int(np.sum(np.diff(modes) != 0))
+        total_steps = len(modes)
+        if total_steps > 0:
+            mode_names = {0: "precision", 1: "ice_aware", 2: "quasi_dp", 3: "escape"}
+            for mode_id, mode_name in mode_names.items():
+                mode_ratios[f"mode_{mode_name}_ratio"] = float(np.mean(modes == mode_id))
+
+    # CBF margin
+    cbf_col = _find_column(df, ["cbf_slack", "cbf_margin"], None)
+    min_cbf_margin = float("nan")
+    if cbf_col:
+        cbf_vals = pd.to_numeric(df[cbf_col], errors="coerce").dropna()
+        if len(cbf_vals) > 0:
+            min_cbf_margin = float(cbf_vals.min())
+
     return {
         "scenario_id": scenario_id,
         "controller": controller,
@@ -194,17 +240,24 @@ def summarize_run(
         "p99_position_error_m": _safe_quantile(pos, 0.99),
         "max_position_error_m": float(pos.max(skipna=True)) if len(pos) else float("nan"),
         "rms_heading_error_rad": float(math.sqrt(np.nanmean(np.square(heading)))) if len(heading) else float("nan"),
+        "p95_heading_error_rad": _safe_quantile(heading, 0.95),
         "safety_violation_time_s": float(violation.sum() * dt),
         "safety_violation_ratio": float(violation.mean()) if len(violation) else 0.0,
         "thrust_saturation_ratio": saturation_ratio,
+        "yaw_moment_saturation_ratio": yaw_saturation,
         "allocation_failure_ratio": float(1.0 - alloc_success.mean()) if len(alloc_success) else 0.0,
         "energy_proxy": float(energy.iloc[-1]) if len(energy) else float("nan"),
+        "total_variation_of_control": total_variation,
+        "solver_time_mean_ms": solver_time_mean,
         "solver_time_p95_ms": _safe_quantile(solve_ms, 0.95),
         "solver_time_max_ms": float(solve_ms.max(skipna=True)) if len(solve_ms) else float("nan"),
         "infeasible_rate": float(1.0 - solver_success.mean()) if len(solver_success) else 0.0,
         "failure": failure,
         "cvar_risk_p95": _safe_quantile(cvar_proxy, 0.95),
         "tail_position_cvar95_m": _cvar(pos, 0.95),
+        "min_cbf_margin": min_cbf_margin,
+        "mode_switch_count": mode_switch_count,
+        **mode_ratios,
     }
 
 
