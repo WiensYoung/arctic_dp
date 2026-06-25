@@ -268,6 +268,26 @@ def run_experiments(
     if skipped:
         print(f"  Skipped {len(skipped)} scenario-controller combinations due to missing dependencies.")
 
+    # 记录跳过的控制器
+    if skipped:
+        (out_dir / "skip_report.json").write_text(
+            json.dumps({"skipped": skipped, "reason": "missing dependencies"}, indent=2),
+            encoding="utf-8",
+        )
+
+    if not run_rows:
+        print("  WARNING: No experiments were executed. "
+              "Check controller dependencies, e.g. install casadi for nmpc.")
+        (out_dir / "skip_report.json").write_text(
+            json.dumps({
+                "skipped_all": True,
+                "skipped_controllers": controllers,
+                "reason": "All controllers were skipped due to missing dependencies.",
+            }, indent=2),
+            encoding="utf-8",
+        )
+        return out_dir
+
     save_tables(run_rows, out_dir)
     make_all_figures(out_dir / "aggregate_metrics_ci95.csv", out_dir / "figures", control_period_ms=100.0)
     return out_dir
