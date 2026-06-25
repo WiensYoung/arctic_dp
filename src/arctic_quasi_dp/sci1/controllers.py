@@ -519,6 +519,7 @@ class ModeSupervisedIceDPController(BaseController):
         self._mode = DPMode.PRECISION
         self._last_switch_t = -1e9
         self._raw_ice = {"concentration": 0.0, "thickness": 0.0, "drift_speed": 0.0, "drift_direction": 0.0}
+        self._ice_est = dict(self._raw_ice)
         self._t = 0.0
 
     def set_target(self, x: float, y: float, psi_deg: float) -> None:
@@ -548,20 +549,25 @@ class ModeSupervisedIceDPController(BaseController):
         # 传播到所有有 set_ice_conditions 的子控制器 (precision 没有该方法，跳过)
         for c in [self.ice_aware, self.quasi, self.escape]:
             c.set_ice_conditions(ice_concentration, ice_thickness, ice_drift_speed, ice_drift_direction)
+        # 更新 supervisor 自身的冰况估计 (使用 ice_aware 的观测器输出)
+        self._ice_est = dict(self.ice_aware._ice_est)
 
     def _risk_proxy(self, state: NDArray[np.float64]) -> Tuple[float, float]:
         """风险代理 — 使用与 IceAware 相同的标准化公式。
 
+        使用估计冰况 (来自观测器)，不使用 true ice。
         CVaR 分量从当前子控制器的诊断中获取 (如果可用)，
         否则用冰况参数估计。
         """
         pos_err = 0.0
         if self.target_position is not None:
             pos_err = float(np.linalg.norm(np.asarray(state[:2]) - np.asarray(self.target_position)))
+        # 使用 ice_aware 子控制器的估计冰况 (经过观测器)
+        ice_est = self.ice_aware._ice_est if hasattr(self.ice_aware, '_ice_est') else self._raw_ice
         ice_risk = _ice_risk_standardized(
-            self._raw_ice["concentration"],
-            self._raw_ice["thickness"],
-            self._raw_ice["drift_speed"],
+            ice_est["concentration"],
+            ice_est["thickness"],
+            ice_est["drift_speed"],
         )
         # CVaR 估计: 优先使用当前子控制器诊断, 否则用冰况代理
         cvar_est = 0.0
@@ -570,15 +576,16 @@ class ModeSupervisedIceDPController(BaseController):
             diag = current_ctrl.get_diagnostics()
             cvar_est = diag.get("risk_cvar", 0.0)
         if cvar_est == 0.0:
-            # 用冰况参数估计 CVaR (与 IceAware._cvar_proxy 的 sigma 逻辑一致)
-            c = self._raw_ice["concentration"]
-            h = self._raw_ice["thickness"]
+            c = ice_est["concentration"]
+            h = ice_est["thickness"]
             cvar_est = float(np.clip(0.15 * c * (0.25 + h), 0.0, 1.0))
         total = float(np.clip(0.35 * min(1.0, pos_err / 15.0) + 0.35 * ice_risk + 0.30 * cvar_est, 0.0, 1.0))
         return total, pos_err
 
     def _select_mode(self, state: NDArray[np.float64], dt: float) -> DPMode:
         self._t += dt
+        # 更新 ice_aware 的观测器估计
+        self.ice_aware._update_ice_estimate()
         risk, pos_err = self._risk_proxy(state)
         p = self.params
         if self._t - self._last_switch_t < p.dwell_time:
@@ -632,4 +639,5 @@ class ModeSupervisedIceDPController(BaseController):
         self._mode = DPMode.PRECISION
         self._last_switch_t = -1e9
         self._t = 0.0
+        self._ice_est = {"concentration": 0.0, "thickness": 0.0, "drift_speed": 0.0, "drift_direction": 0.0}
         self._last_diagnostics = {}
