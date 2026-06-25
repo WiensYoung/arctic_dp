@@ -59,12 +59,12 @@ class VesselParams:
     """船舶物理参数。"""
     mass: float = 500000.0         # kg (雪龙2号 ~14000t, 简化为 500t)
     Izz: float = 5e8               # kg·m²
-    Xu: float = -500.0             # surge linear damping
-    Yv: float = -800.0             # sway linear damping
-    Nr: float = -2e5               # yaw linear damping
-    Xu_abs: float = -200.0         # surge quadratic damping
-    Yv_abs: float = -300.0         # sway quadratic damping
-    Nr_abs: float = -5e4           # yaw quadratic damping
+    Xu: float = 500.0              # surge linear damping (N·s/m)
+    Yv: float = 800.0              # sway linear damping (N·s/m)
+    Nr: float = 2e5                # yaw linear damping (N·m·s/rad)
+    Xu_abs: float = 200.0          # surge quadratic damping (N·s²/m²)
+    Yv_abs: float = 300.0          # sway quadratic damping (N·s²/m²)
+    Nr_abs: float = 5e4            # yaw quadratic damping (N·m·s²/rad²)
     length: float = 122.5          # vessel length (m)
     beam: float = 22.0             # vessel beam (m)
     ice_crushing_strength_mpa: float = 2.0

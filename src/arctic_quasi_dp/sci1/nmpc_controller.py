@@ -50,12 +50,12 @@ class NMPCParams:
     # 船舶物理参数 (与 sim_loop.VesselParams 一致)
     mass: float = 500000.0           # 船舶质量 (kg) — 简化为 500t
     Izz: float = 5e8                 # 偏航转动惯量 (kg·m²)
-    Xu: float = -500.0               # surge 线性阻尼 (N·s/m)
-    Yv: float = -800.0               # sway 线性阻尼 (N·s/m)
-    Nr: float = -2e5                 # yaw 线性阻尼 (N·m·s/rad)
-    Xu_abs: float = -200.0           # surge 二次阻尼 (N·s²/m²)
-    Yv_abs: float = -300.0           # sway 二次阻尼 (N·s²/m²)
-    Nr_abs: float = -5e4             # yaw 二次阻尼 (N·m·s²/rad²)
+    Xu: float = 500.0                # surge 线性阻尼 (N·s/m)
+    Yv: float = 800.0                # sway 线性阻尼 (N·s/m)
+    Nr: float = 2e5                  # yaw 线性阻尼 (N·m·s/rad)
+    Xu_abs: float = 200.0            # surge 二次阻尼 (N·s²/m²)
+    Yv_abs: float = 300.0            # sway 二次阻尼 (N·s²/m²)
+    Nr_abs: float = 5e4              # yaw 二次阻尼 (N·m·s²/rad²)
     # 与 sim_loop.VesselParams 保持一致
 
     # 代价权重

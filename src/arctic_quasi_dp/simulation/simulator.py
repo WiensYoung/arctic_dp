@@ -57,12 +57,12 @@ class Simulator:
         # 船舶参数 (与 sim_loop.VesselParams 一致)
         self.mass = 500000.0     # 500 tonnes (简化)
         self.Izz = 5e8           # kg·m²
-        self.Xu = -500.0
-        self.Yv = -800.0
-        self.Nr = -2e5
-        self.Xu_abs = -200.0
-        self.Yv_abs = -300.0
-        self.Nr_abs = -5e4
+        self.Xu = 500.0
+        self.Yv = 800.0
+        self.Nr = 2e5
+        self.Xu_abs = 200.0
+        self.Yv_abs = 300.0
+        self.Nr_abs = 5e4
         self.vessel_length = 122.5
         self.vessel_beam = 22.0
 
