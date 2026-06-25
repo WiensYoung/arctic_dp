@@ -88,8 +88,48 @@ _DEGRADATION_PROFILES = {
 
 # ---------- 控制器构建 ----------
 
+# ---------- 控制器能力矩阵 ----------
+
+_CONTROLLER_CAPABILITIES = {
+    "pid": {"observer": False, "cvar": False, "cbf": False, "thruster_deg": False,
+            "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": False},
+    "smc": {"observer": False, "cvar": False, "cbf": False, "thruster_deg": False,
+            "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": False},
+    "precision": {"observer": False, "cvar": False, "cbf": False, "thruster_deg": False,
+                  "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": False},
+    "ice_aware": {"observer": True, "cvar": True, "cbf": True, "thruster_deg": False,
+                  "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": False},
+    "quasi_dp": {"observer": True, "cvar": True, "cbf": True, "thruster_deg": False,
+                 "mode_supervisor": False, "quasi_dp": True, "escape": False, "oracle": False, "casadi": False},
+    "escape": {"observer": True, "cvar": True, "cbf": True, "thruster_deg": False,
+               "mode_supervisor": False, "quasi_dp": False, "escape": True, "oracle": False, "casadi": False},
+    "full": {"observer": True, "cvar": True, "cbf": True, "thruster_deg": True,
+             "mode_supervisor": True, "quasi_dp": True, "escape": True, "oracle": False, "casadi": False},
+    "nmpc": {"observer": False, "cvar": False, "cbf": True, "thruster_deg": False,
+             "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": True},
+    "no_cbf": {"observer": True, "cvar": True, "cbf": False, "thruster_deg": True,
+               "mode_supervisor": True, "quasi_dp": True, "escape": True, "oracle": False, "casadi": False},
+    "no_cvar": {"observer": True, "cvar": False, "cbf": True, "thruster_deg": True,
+                "mode_supervisor": True, "quasi_dp": True, "escape": True, "oracle": False, "casadi": False},
+    "no_observer": {"observer": False, "cvar": True, "cbf": True, "thruster_deg": True,
+                    "mode_supervisor": True, "quasi_dp": True, "escape": True, "oracle": False, "casadi": False},
+    "no_fallback": {"observer": True, "cvar": True, "cbf": True, "thruster_deg": True,
+                    "mode_supervisor": True, "quasi_dp": False, "escape": False, "oracle": False, "casadi": False},
+    "oracle_full": {"observer": True, "cvar": True, "cbf": True, "thruster_deg": True,
+                    "mode_supervisor": True, "quasi_dp": True, "escape": True, "oracle": True, "casadi": False},
+    "lqg": {"observer": True, "cvar": False, "cbf": False, "thruster_deg": False,
+            "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": False},
+    "dob_nmpc": {"observer": True, "cvar": False, "cbf": True, "thruster_deg": False,
+                 "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": True},
+    "robust_mpc": {"observer": True, "cvar": False, "cbf": True, "thruster_deg": False,
+                   "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": True},
+    "tube_mpc": {"observer": True, "cvar": False, "cbf": True, "thruster_deg": False,
+                 "mode_supervisor": False, "quasi_dp": False, "escape": False, "oracle": False, "casadi": True},
+}
+
+
 def build_controller(name: str):
-    """构建控制器实例。NMPC 不可用时抛出明确错误。"""
+    """构建控制器实例。未实现或缺依赖时抛出明确错误。"""
     name = name.lower()
     if name == "pid":
         return PIDController(PIDParams(Kp_pos=150, Kd_pos=90, Ki_pos=0.2, Kp_heading=600, Kd_heading=260, Ki_heading=0.5))
@@ -107,10 +147,7 @@ def build_controller(name: str):
         return ModeSupervisedIceDPController()
     if name == "nmpc":
         if not _NMPC_AVAILABLE:
-            raise ImportError(
-                "CasADi is required for NMPC controller. "
-                "Install with: pip install casadi"
-            )
+            raise ImportError("CasADi is required for NMPC controller. Install with: pip install casadi")
         return NMPCIceController(NMPCParams())
     if name == "no_cbf":
         return ModeSupervisedIceDPController(
@@ -132,7 +169,26 @@ def build_controller(name: str):
         )
     if name == "no_fallback":
         return ModeSupervisedIceDPController(params=SupervisorParams(high_risk_enter=2.0, extreme_risk_enter=3.0))
+    if name == "oracle_full":
+        # oracle_full uses true ice (upper-bound ablation only)
+        ctrl = ModeSupervisedIceDPController()
+        ctrl._oracle_mode = True  # Flag for oracle ice access
+        return ctrl
+    if name in ("lqg", "dob_nmpc", "robust_mpc", "tube_mpc"):
+        raise NotImplementedError(
+            f"{name} is not yet implemented. "
+            f"It will be skipped. See skip_report.json for details."
+        )
     raise ValueError(f"Unknown controller: {name}")
+
+
+def save_controller_capability_matrix(out_dir: Path) -> None:
+    """Save controller capability matrix CSV."""
+    from .tables import generate_table2_controller_matrix
+    summary_dir = out_dir / "summary"
+    summary_dir.mkdir(parents=True, exist_ok=True)
+    df = generate_table2_controller_matrix()
+    df.to_csv(summary_dir / "controller_capability_matrix.csv", index=False)
 
 
 # ---------- 冰况调度 ----------
@@ -248,14 +304,13 @@ def run_experiments(
     for scenario in scenarios:
         for ctrl_name in controllers:
             for seed in range(seeds):
-                # 构建控制器 (NMPC 不可用时跳过)
                 try:
                     controller = build_controller(ctrl_name)
-                except ImportError as e:
+                except (ImportError, NotImplementedError) as e:
                     key = f"{scenario.scenario_id}:{ctrl_name}"
                     if key not in skipped:
                         skipped.append(key)
-                        print(f"  SKIP {ctrl_name} (missing dependency: {e})")
+                        print(f"  SKIP {ctrl_name}: {e}")
                     continue
 
                 df, dt = _run_single(scenario, ctrl_name, controller, seed, profile)
@@ -269,14 +324,16 @@ def run_experiments(
                 run_rows.append(summarize_run(df, scenario.scenario_id, ctrl_name, seed, dt, safe_region_radius=scenario.safe_region_radius))
 
     if skipped:
-        print(f"  Skipped {len(skipped)} scenario-controller combinations due to missing dependencies.")
+        print(f"  Skipped {len(skipped)} scenario-controller combinations.")
 
-    # 记录跳过的控制器
     if skipped:
         (out_dir / "skip_report.json").write_text(
-            json.dumps({"skipped": skipped, "reason": "missing dependencies"}, indent=2),
+            json.dumps({"skipped": skipped, "reason": "missing dependencies or not implemented"}, indent=2),
             encoding="utf-8",
         )
+
+    # Save controller capability matrix
+    save_controller_capability_matrix(out_dir)
 
     if not run_rows:
         print("  WARNING: No experiments were executed. "
