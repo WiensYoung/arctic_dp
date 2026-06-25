@@ -33,9 +33,12 @@ from .ice_schedule import IceSchedule, IceState
 # ============================================================
 
 def _find_coord(ds, candidates: List[str]):
-    """在 xarray Dataset 中查找坐标变量。"""
+    """在 xarray Dataset 中查找坐标变量 (先查 coords, 再查 variables)。"""
     for name in candidates:
         if name in ds.coords:
+            return ds[name]
+    for name in candidates:
+        if name in ds.variables:
             return ds[name]
     return None
 
