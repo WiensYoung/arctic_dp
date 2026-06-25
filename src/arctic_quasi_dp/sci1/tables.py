@@ -169,8 +169,8 @@ def save_all_tables(
     out_dir: Path,
     profile: str = "paper",
 ) -> None:
-    """Save all paper tables to summary/ directory."""
-    summary_dir = out_dir / "summary"
+    """Save all paper tables to out_dir (should be the summary/ directory)."""
+    summary_dir = out_dir
     summary_dir.mkdir(parents=True, exist_ok=True)
 
     # Table 1

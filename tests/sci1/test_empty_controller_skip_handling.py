@@ -18,7 +18,6 @@ class TestEmptyControllerSkip:
         with tempfile.TemporaryDirectory() as tmpdir:
             out = Path(tmpdir) / "results"
 
-            # Mock build_controller to always raise ImportError
             with patch("arctic_quasi_dp.sci1.runner.build_controller", side_effect=ImportError("no module")):
                 result_dir = run_experiments(
                     profile="smoke",
@@ -28,8 +27,8 @@ class TestEmptyControllerSkip:
                     save_traces=False,
                 )
 
-            assert (result_dir / "skip_report.json").exists()
-            report = json.loads((result_dir / "skip_report.json").read_text())
+            assert (result_dir / "metadata" / "skip_report.json").exists()
+            report = json.loads((result_dir / "metadata" / "skip_report.json").read_text())
             assert report.get("skipped_all") is True
 
     def test_all_skipped_no_crash(self):
@@ -71,4 +70,4 @@ class TestEmptyControllerSkip:
                 )
 
             # Should have results (pid ran successfully)
-            assert (result_dir / "per_seed_metrics.csv").exists()
+            assert (result_dir / "raw" / "per_seed_metrics.csv").exists()

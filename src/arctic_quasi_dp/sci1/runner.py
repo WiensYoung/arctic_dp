@@ -280,23 +280,111 @@ def _run_single(
 
 # ---------- 主实验循环 ----------
 
+def _create_run_directories(out_dir: Path) -> Dict[str, Path]:
+    """Create structured output directories."""
+    dirs = {
+        "root": out_dir,
+        "metadata": out_dir / "metadata",
+        "raw": out_dir / "raw",
+        "raw_traces": out_dir / "raw" / "per_timestep_traces",
+        "summary": out_dir / "summary",
+        "figures_main": out_dir / "figures" / "main",
+        "figures_supp": out_dir / "figures" / "supplementary",
+    }
+    for d in dirs.values():
+        d.mkdir(parents=True, exist_ok=True)
+    return dirs
+
+
+def _save_metadata(
+    dirs: Dict[str, Path],
+    profile: str,
+    controllers: List[str],
+    seeds: int,
+    scenarios: list,
+    effective_cfg: Dict[str, Any],
+) -> None:
+    """Save all metadata files."""
+    meta = _metadata()
+
+    # Run manifest
+    run_manifest = {
+        "metadata": meta,
+        "profile": profile,
+        "seeds": seeds,
+        "controllers": controllers,
+        "n_scenarios": len(scenarios),
+        "scenario_ids": [s.scenario_id for s in scenarios],
+    }
+    (dirs["metadata"] / "run_manifest.json").write_text(
+        json.dumps(run_manifest, indent=2, ensure_ascii=False), encoding="utf-8",
+    )
+
+    # Scenario manifest
+    (dirs["metadata"] / "scenario_manifest.json").write_text(
+        json.dumps({"metadata": meta, "profile": profile, "scenarios": [s.to_dict() for s in scenarios]},
+                    indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    # Effective config
+    (dirs["metadata"] / "effective_config.json").write_text(
+        json.dumps(effective_cfg, indent=2, ensure_ascii=False), encoding="utf-8",
+    )
+
+    # Git info
+    import subprocess
+    try:
+        git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent.parent.parent.parent).decode().strip()
+        git_branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=Path(__file__).parent.parent.parent.parent).decode().strip()
+    except Exception:
+        git_hash = "unknown"
+        git_branch = "unknown"
+    (dirs["metadata"] / "git_info.json").write_text(
+        json.dumps({"hash": git_hash, "branch": git_branch}, indent=2), encoding="utf-8",
+    )
+
+    # Vessel manifest
+    from .sim_loop import VesselParams
+    vp = VesselParams()
+    (dirs["metadata"] / "vessel_manifest.json").write_text(
+        json.dumps({
+            "name": "simplified_500t",
+            "mass_kg": vp.mass,
+            "Iz_kgm2": vp.Izz,
+            "length_m": vp.length,
+            "beam_m": vp.beam,
+            "source_note": "Simplified 500t model for simulation. See configs/vessels/xuelong2_like.yaml for XueLong2-like parameters.",
+        }, indent=2),
+        encoding="utf-8",
+    )
+
+    # Data manifest
+    write_manifest(dirs["metadata"] / "data_manifest.json")
+
+
 def run_experiments(
     profile: str,
     seeds: int,
     controllers: List[str],
     out_dir: Path,
     save_traces: bool = True,
+    effective_cfg: Optional[Dict[str, Any]] = None,
 ) -> Path:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    traces_dir = out_dir / "traces"
-    if save_traces:
-        traces_dir.mkdir(parents=True, exist_ok=True)
-    write_manifest(out_dir / "data_manifest.json")
+    """Run experiment matrix with structured output.
+
+    Output structure:
+      out_dir/
+        metadata/    — config, git, vessel, data provenance
+        raw/         — per_seed_metrics.csv, traces/
+        summary/     — aggregate, statistical, capability, tables
+        figures/main/ — paper figures
+        figures/supplementary/ — supplementary figures
+    """
+    dirs = _create_run_directories(out_dir)
     scenarios = build_sci1_scenarios(profile)
-    (out_dir / "scenario_manifest.json").write_text(
-        json.dumps({"metadata": _metadata(), "profile": profile, "scenarios": [s.to_dict() for s in scenarios]}, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+
+    _save_metadata(dirs, profile, controllers, seeds, scenarios, effective_cfg or {})
 
     run_rows: List[Dict] = []
     skipped: List[str] = []
@@ -319,37 +407,49 @@ def run_experiments(
                 df.insert(0, "controller", ctrl_name)
                 df.insert(0, "scenario_id", scenario.scenario_id)
                 if save_traces:
-                    trace_path = traces_dir / f"{scenario.scenario_id}__{ctrl_name}__seed{seed}.csv"
+                    trace_path = dirs["raw_traces"] / f"{scenario.scenario_id}__{ctrl_name}__seed{seed}.csv"
                     df.to_csv(trace_path, index=False)
                 run_rows.append(summarize_run(df, scenario.scenario_id, ctrl_name, seed, dt, safe_region_radius=scenario.safe_region_radius))
 
     if skipped:
         print(f"  Skipped {len(skipped)} scenario-controller combinations.")
-
-    if skipped:
-        (out_dir / "skip_report.json").write_text(
+        (dirs["metadata"] / "skip_report.json").write_text(
             json.dumps({"skipped": skipped, "reason": "missing dependencies or not implemented"}, indent=2),
             encoding="utf-8",
         )
 
     # Save controller capability matrix
-    save_controller_capability_matrix(out_dir)
+    from .tables import generate_table2_controller_matrix
+    cap_df = generate_table2_controller_matrix()
+    cap_df.to_csv(dirs["summary"] / "controller_capability_matrix.csv", index=False)
 
     if not run_rows:
-        print("  WARNING: No experiments were executed. "
-              "Check controller dependencies, e.g. install casadi for nmpc.")
-        (out_dir / "skip_report.json").write_text(
-            json.dumps({
-                "skipped_all": True,
-                "skipped_controllers": controllers,
-                "reason": "All controllers were skipped due to missing dependencies.",
-            }, indent=2),
+        print("  WARNING: No experiments were executed.")
+        (dirs["metadata"] / "skip_report.json").write_text(
+            json.dumps({"skipped_all": True, "skipped_controllers": controllers,
+                        "reason": "All controllers were skipped."}, indent=2),
             encoding="utf-8",
         )
         return out_dir
 
-    save_tables(run_rows, out_dir)
-    make_all_figures(out_dir / "aggregate_metrics_ci95.csv", out_dir / "figures", control_period_ms=100.0)
+    # Save raw per-seed metrics
+    import pandas as pd
+    run_df = pd.DataFrame(run_rows)
+    run_df.to_csv(dirs["raw"] / "per_seed_metrics.csv", index=False)
+
+    # Save summary tables
+    from .metrics import save_tables, aggregate_summary
+    save_tables(run_rows, dirs["summary"])
+
+    # Generate figures
+    agg_csv = dirs["summary"] / "aggregate_metrics_ci95.csv"
+    if agg_csv.exists():
+        make_all_figures(agg_csv, dirs["figures_main"], control_period_ms=100.0)
+
+    # Save paper tables
+    from .tables import save_all_tables
+    save_all_tables(run_df, dirs["summary"], profile=profile)
+
     return out_dir
 
 
@@ -467,8 +567,6 @@ def main(argv: List[str] | None = None) -> int:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         out = Path("results") / "sci1_submission" / f"{profile}_{stamp}"
 
-    # 保存 effective config
-    out.mkdir(parents=True, exist_ok=True)
     effective_cfg = {
         "profile": profile,
         "seeds": seeds,
@@ -477,14 +575,11 @@ def main(argv: List[str] | None = None) -> int:
         "config_hash": _config_hash(cfg),
         "source_config": str(args.config) if args.config else "cli_only",
     }
-    (out / "effective_config.json").write_text(
-        json.dumps(effective_cfg, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
 
     result_dir = run_experiments(
         profile, seeds, controllers, out,
         save_traces=save_traces,
+        effective_cfg=effective_cfg,
     )
     print(f"SCI1 experiment outputs written to: {result_dir}")
     return 0
