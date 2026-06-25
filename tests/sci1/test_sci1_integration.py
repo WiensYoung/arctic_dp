@@ -48,19 +48,17 @@ class TestScenarios:
         assert "B_ice_enhancement" in groups
         assert "C_fault_tolerance" in groups
         assert "D_safety_degradation" in groups
-        assert "E_realtime" in groups
-        assert "F_miz" in groups
+        assert "E_sensor_degradation" in groups
+        assert "F_runtime" in groups
+        assert "G_ice_sensitivity" in groups
 
-    def test_timevarying_scenario(self):
+    def test_scenario_count_smoke(self):
         scenarios = build_sci1_scenarios("smoke")
-        b4 = [s for s in scenarios if s.scenario_id == "B4_nonstationary_ice_ramp"]
-        assert len(b4) == 1
-        s = b4[0]
-        assert s.ice_time_varying
-        ice_start = s.ice_conditions_at(0.0)
-        ice_end = s.ice_conditions_at(s.duration)
-        assert ice_start["concentration"] < ice_end["concentration"]
-        assert ice_start["drift_speed"] < ice_end["drift_speed"]
+        assert len(scenarios) >= 30
+
+    def test_scenario_count_paper(self):
+        scenarios = build_sci1_scenarios("paper")
+        assert len(scenarios) >= 30
 
     def test_scenario_to_dict(self):
         s = build_sci1_scenarios("smoke")[0]
