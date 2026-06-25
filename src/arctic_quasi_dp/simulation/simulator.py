@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from ..sci1.sim_loop import compute_dynamics_derivatives
+
 
 @dataclass
 class SimulationConfig:
@@ -91,15 +93,14 @@ class Simulator:
     def _dynamics(
         self, state: NDArray, tau_ctrl: NDArray, tau_ice: NDArray,
     ) -> NDArray:
-        psi = state[2]
-        u, v, r = state[3], state[4], state[5]
-        cpsi, spsi = math.cos(psi), math.sin(psi)
-        xdot = cpsi * u - spsi * v
-        ydot = spsi * u + cpsi * v
-        udot = (tau_ctrl[0] + tau_ice[0] - self.Xu * u - self.Xu_abs * abs(u) * u) / self.mass
-        vdot = (tau_ctrl[1] + tau_ice[1] - self.Yv * v - self.Yv_abs * abs(v) * v) / self.mass
-        rdot = (tau_ctrl[2] + tau_ice[2] - self.Nr * r - self.Nr_abs * abs(r) * r) / self.Izz
-        return np.array([xdot, ydot, r, udot, vdot, rdot], dtype=np.float64)
+        """调用公共动力学核心。"""
+        return compute_dynamics_derivatives(
+            state[2], state[3], state[4], state[5],
+            tau_ctrl, tau_ice,
+            self.mass, self.Izz,
+            self.Xu, self.Yv, self.Nr,
+            self.Xu_abs, self.Yv_abs, self.Nr_abs,
+        )
 
     def _rk4(self, state: NDArray, tau: NDArray, tau_ice: NDArray, dt: float) -> NDArray:
         k1 = self._dynamics(state, tau, tau_ice)

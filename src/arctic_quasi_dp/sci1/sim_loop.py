@@ -104,16 +104,19 @@ def _ice_force_body(
     return np.array([force_body[0], force_body[1], moment], dtype=np.float64)
 
 
-def _dynamics(
-    state: VesselState,
+def compute_dynamics_derivatives(
+    psi: float, u: float, v: float, r: float,
     tau_control: NDArray[np.float64],
     tau_ice: NDArray[np.float64],
-    params: VesselParams,
+    mass: float, Izz: float,
+    Xu: float, Yv: float, Nr: float,
+    Xu_abs: float, Yv_abs: float, Nr_abs: float,
 ) -> NDArray[np.float64]:
-    """计算状态导数 (连续时间)。"""
-    psi = state.psi
-    u, v, r = state.u, state.v, state.r
+    """计算 3-DOF 状态导数 (公共动力学核心)。
 
+    统一的动力学函数，sim_loop 和 simulator 共用。
+    阻尼参数为正值，公式为 (force - Xu*u - Xu_abs*|u|*u) / mass。
+    """
     cpsi, spsi = math.cos(psi), math.sin(psi)
     xdot = cpsi * u - spsi * v
     ydot = spsi * u + cpsi * v
@@ -123,11 +126,27 @@ def _dynamics(
     total_fy = tau_control[1] + tau_ice[1]
     total_mz = tau_control[2] + tau_ice[2]
 
-    udot = (total_fx - params.Xu * u - params.Xu_abs * abs(u) * u) / params.mass
-    vdot = (total_fy - params.Yv * v - params.Yv_abs * abs(v) * v) / params.mass
-    rdot = (total_mz - params.Nr * r - params.Nr_abs * abs(r) * r) / params.Izz
+    udot = (total_fx - Xu * u - Xu_abs * abs(u) * u) / mass
+    vdot = (total_fy - Yv * v - Yv_abs * abs(v) * v) / mass
+    rdot = (total_mz - Nr * r - Nr_abs * abs(r) * r) / Izz
 
     return np.array([xdot, ydot, psidot, udot, vdot, rdot], dtype=np.float64)
+
+
+def _dynamics(
+    state: VesselState,
+    tau_control: NDArray[np.float64],
+    tau_ice: NDArray[np.float64],
+    params: VesselParams,
+) -> NDArray[np.float64]:
+    """计算状态导数 (连续时间)。调用公共动力学核心。"""
+    return compute_dynamics_derivatives(
+        state.psi, state.u, state.v, state.r,
+        tau_control, tau_ice,
+        params.mass, params.Izz,
+        params.Xu, params.Yv, params.Nr,
+        params.Xu_abs, params.Yv_abs, params.Nr_abs,
+    )
 
 
 def _rk4_step(
