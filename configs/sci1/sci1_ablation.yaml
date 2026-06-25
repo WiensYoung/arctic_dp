@@ -1,0 +1,19 @@
+# Ablation study config — compare full vs ablations
+profile: paper
+seeds: 10
+controllers:
+  - full
+  - no_cbf
+  - no_cvar
+  - no_observer
+  - no_fallback
+  - oracle_full
+scenarios:
+  include_groups: [B, C, D]
+output:
+  root: results/sci1_submission
+  save_traces: true
+  save_figures: true
+runtime:
+  fail_fast: false
+  skip_missing_optional_controllers: true

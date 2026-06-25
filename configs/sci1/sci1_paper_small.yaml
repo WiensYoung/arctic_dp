@@ -1,0 +1,22 @@
+# Paper-small config — 5 seeds for development iteration
+profile: paper
+seeds: 5
+controllers:
+  - pid
+  - smc
+  - precision
+  - ice_aware
+  - full
+  - no_cbf
+  - no_cvar
+  - no_observer
+  - no_fallback
+scenarios:
+  include_groups: [A, B, C, D, E, F, G]
+output:
+  root: results/sci1_submission
+  save_traces: true
+  save_figures: true
+runtime:
+  fail_fast: false
+  skip_missing_optional_controllers: true
