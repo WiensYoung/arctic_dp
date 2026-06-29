@@ -1,0 +1,35 @@
+# SCI1 Method Paper Small - OSQP-backed Soft-HOCBF-QP formal run
+# Controllers: proposed method + ablation variants + baselines
+# Seeds: 10 (increase to 30+ for final submission)
+
+profile: paper_small
+seeds: 10
+controllers:
+  - ice_aware
+  - no_safety_filter
+  - fixed_soft_hocbf
+  - cvar_soft_hocbf
+  - no_tail_risk
+  - oracle_full
+  - smc
+  - adrc
+  - leso_adrc
+  - robust_mpc
+  - tube_mpc
+scenarios:
+  include_groups: [A, B, C, D, E, I]
+output:
+  save_traces: true
+  save_figures: false
+runtime:
+  fail_fast: true
+statistics:
+  comparisons:
+    - baseline: no_safety_filter
+      candidate: fixed_soft_hocbf
+    - baseline: fixed_soft_hocbf
+      candidate: cvar_soft_hocbf
+    - baseline: no_tail_risk
+      candidate: cvar_soft_hocbf
+    - baseline: ice_aware
+      candidate: cvar_soft_hocbf

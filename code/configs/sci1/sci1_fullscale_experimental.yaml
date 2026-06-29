@@ -1,0 +1,22 @@
+# EXPERIMENTAL full-scale profile — NOT for main proxy-scale paper claims.
+# This profile uses xuelong2_like.yaml which is scale_type=full_scale_experimental.
+# Thruster, controller, damping, and ice-load calibration are NOT fully scaled.
+# Use only for supplementary experiments or sensitivity analysis.
+profile: paper
+seeds: 5
+controllers:
+  - pid
+  - precision
+  - ice_aware
+  - full
+scenarios:
+  include_groups: [A, B, C, D]
+vessel:
+  config_path: configs/vessels/xuelong2_like.yaml
+output:
+  root: results/sci1_submission
+  save_traces: true
+  save_figures: false
+runtime:
+  fail_fast_on_missing_data: false
+  allow_experimental_full_scale: true

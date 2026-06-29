@@ -1,0 +1,29 @@
+# SCI1 Scale Comparison - lightweight proxy vs normalized/full-scale stress evidence.
+# This is NOT a full-scale DP3 validation. It generates scale_analysis.csv quickly.
+
+profile: scale_comparison
+seeds: 1
+controllers:
+  - ice_aware
+  - fixed_soft_hocbf
+  - cvar_soft_hocbf
+  - no_safety_filter
+scenarios:
+  include_ids:
+    - A1_open_water_station_keeping
+    - B2_ice_concentration_jump
+    - C4_azimuth_angle_stuck
+    - C7_total_power_limitation
+    - E5_ice_direction_error
+    - I2_safe_boundary_ice_impulse
+output:
+  save_traces: false
+  save_figures: false
+runtime:
+  fail_fast_on_missing_data: false
+statistics:
+  comparisons:
+    - baseline: no_safety_filter
+      candidate: fixed_soft_hocbf
+    - baseline: fixed_soft_hocbf
+      candidate: cvar_soft_hocbf

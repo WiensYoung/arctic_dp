@@ -1,0 +1,26 @@
+profile: paper_small
+seeds: 5
+controllers:
+- pid
+- precision
+- ice_aware
+- full
+- no_fallback
+- adrc
+- robust_mpc
+- tube_mpc
+scenarios:
+  include_groups:
+  - A
+  - B
+  - C
+  - D
+  - E
+  - F
+  - G
+output:
+  root: results/sci1_submission
+  save_traces: true
+  save_figures: true
+runtime:
+  fail_fast_on_missing_data: false

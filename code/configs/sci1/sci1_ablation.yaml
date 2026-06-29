@@ -1,0 +1,19 @@
+# Ablation study config — compare full vs ablations
+# 30 seeds: Wilcoxon power ~0.85 for dz=0.5, ~0.45 for dz=0.3
+profile: paper
+seeds: 30
+controllers:
+  - full
+  - no_cbf
+  - no_cvar
+  - no_observer
+  - no_fallback
+  - oracle_full
+scenarios:
+  include_groups: [B, C, D]
+output:
+  root: results/sci1_submission
+  save_traces: true
+  save_figures: true
+runtime:
+  fail_fast: false

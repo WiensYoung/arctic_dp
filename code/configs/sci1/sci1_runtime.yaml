@@ -1,0 +1,17 @@
+# Runtime feasibility config
+profile: paper
+seeds: 5
+controllers:
+  - pid
+  - precision
+  - ice_aware
+  - full
+  - nmpc
+scenarios:
+  include_groups: [F]
+output:
+  root: results/sci1_submission
+  save_traces: true
+  save_figures: true
+runtime:
+  fail_fast: false

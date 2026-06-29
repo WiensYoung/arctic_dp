@@ -1,0 +1,20 @@
+# SCI1 Real Replay H1 - requires a real Copernicus/ERA5 subset.
+# This config fails fast if the real file is missing and never falls back to a mock fixture.
+
+profile: method_smoke
+seeds: 1
+controllers:
+  - ice_aware
+  - fixed_soft_hocbf
+  - cvar_soft_hocbf
+scenarios:
+  include_ids:
+    - H1_real_copernicus_era5_replay
+output:
+  save_traces: true
+  save_figures: false
+runtime:
+  fail_fast: true
+  fail_fast_on_missing_data: true
+  require_real_data: true
+  allow_mock_fixture: false

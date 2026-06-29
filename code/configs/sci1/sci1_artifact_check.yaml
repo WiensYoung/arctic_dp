@@ -1,0 +1,31 @@
+profile: artifact_check
+seeds: 2
+controllers:
+- pid
+- precision
+- ice_aware
+- full
+- adrc
+scenarios:
+  include_groups:
+  - A
+  - B
+  - C
+  - D
+  - E
+  - F
+  - G
+  include_ids:
+  - A1_open_water_station_keeping
+  - A5_dynamic_target_tracking
+  - B2_ice_concentration_jump
+  - C4_azimuth_angle_stuck
+  - C7_total_power_limitation
+  - E5_ice_direction_error
+  - G1_empirical_ice_model
+  - H1_mock_copernicus_fixture
+output:
+  save_traces: true
+  save_figures: false
+runtime:
+  fail_fast_on_missing_data: false
