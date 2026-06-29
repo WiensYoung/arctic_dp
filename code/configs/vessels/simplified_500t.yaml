@@ -1,0 +1,34 @@
+# Simplified 500t vessel for smoke tests and fast iteration
+# NOT a real vessel — simplified model for development/testing only.
+
+name: simplified_500t
+vessel_scale: simplified_500t
+scale_type: proxy_scale
+source_note: >
+  Simplified 500-tonne model for proxy-scale experiments.
+  NOT a real vessel. NOT suitable for full-scale DP validation.
+  ice_crushing_strength=0.0003 MPa produces ~1 kN ice forces matching controller/thruster scale.
+
+length_m: 122.5
+beam_m: 22.0
+draft_m: 7.85
+displacement_t: 500
+mass_kg: 500000.0
+Iz_kgm2: 5.0e8
+
+actuator_limits:
+  max_force_n: 3000.0
+  max_moment_nm: 100000.0
+  confidence: simplified_default
+  source_note: "Matched to proxy ice model scale (crushing_strength=0.0003 MPa)."
+
+ice_crushing_strength_mpa: 0.0003
+ice_structure_factor: 0.45
+waterline_angle_deg: 30.0
+
+Xu: 500.0
+Yv: 800.0
+Nr: 200000.0
+Xu_abs: 200.0
+Yv_abs: 300.0
+Nr_abs: 50000.0

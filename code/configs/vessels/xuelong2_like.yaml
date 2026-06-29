@@ -1,0 +1,70 @@
+# XueLong2-like vessel parameters
+# NOTE: Publicly reported vessel scale only; NOT official DP-control or thruster parameters.
+# Source: Publicly available vessel specifications, ice class reports.
+
+name: xuelong2_like
+vessel_scale: xuelong2_like
+scale_type: full_scale_experimental
+source_note: >
+  Publicly reported vessel scale only; not official DP-control or thruster parameters.
+  Mass and inertia are engineering estimates based on displacement and length.
+  CAUTION: This is an experimental full-scale configuration. Thruster, controller,
+  damping, and ice-load calibration are NOT fully scaled. Do NOT use for main claims
+  without explicit full-scale validation.
+
+# Principal dimensions (publicly reported)
+length_m: 122.5
+beam_m: 22.32
+draft_m: 7.85
+displacement_t: 13996
+
+# Derived (engineering estimate)
+mass_kg: 13996000.0      # displacement * 1000
+Iz_kgm2: null            # Estimated from length^2 * mass * 0.15 if null
+
+# Actuator limits (engineering estimate, NOT official)
+actuator_limits:
+  max_force_n: 1.0e6     # ~1 MN total (multiple thrusters ~200-500 kN each)
+  max_moment_nm: 8.0e7   # ~80 MN*m
+  confidence: engineering_estimated
+  source_note: >
+    Engineering approximation for simulation only; not official XueLong2 DP parameters.
+    Typical DP thruster force for large vessels is hundreds of kN per thruster.
+
+# Ice parameters (Lindqvist 1989 proxy, literature-calibrated)
+ice_crushing_strength_mpa: 2.0    # Range: 1-5 MPa for first-year ice (ISO 19906)
+ice_structure_factor: 0.45        # Lindqvist 1989
+waterline_angle_deg: 30.0         # Typical ice-breaking bow angle
+
+# Damping (engineering estimate, scaled from proxy by mass ratio ~28x)
+# The proxy vessel (500t) has damping giving time constants of ~1000s (surge),
+# ~625s (sway), ~2500s (yaw). For physical realism, we scale linear damping
+# proportionally to mass and quadratic damping to mass^(2/3) (drag area scaling).
+# Xu: mass ratio * 500 = 28 * 500 = 14000; time constant = 13996000/14000 ≈ 1000s
+# Yv: mass ratio * 800 = 22400; time constant = 13996000/22400 ≈ 625s
+# Nr: mass ratio * 200000 = 5.6e6; time constant = Izz_est/5.6e6 ≈ 2500s
+# Quadratic terms scaled by (mass_ratio)^(2/3) ≈ 9.2
+mass_ratio: 28.0   # 13996000 / 500000
+Xu: 14000.0        # surge linear (N*s/m) — scaled from 500 by mass ratio
+Yv: 22400.0        # sway linear (N*s/m) — scaled from 800 by mass ratio
+Nr: 5600000.0      # yaw linear (N*m*s/rad) — scaled from 200000 by mass ratio
+Xu_abs: 1850.0     # surge quadratic (N*s^2/m^2) — scaled from 200 by mass_ratio^(2/3)
+Yv_abs: 2770.0     # sway quadratic (N*s^2/m^2) — scaled from 300 by mass_ratio^(2/3)
+Nr_abs: 460000.0   # yaw quadratic (N*m*s^2/rad^2) — scaled from 50000 by mass_ratio^(2/3)
+
+# Parameter confidence
+parameter_confidence:
+  public_scale:
+    length_m: official_public
+    beam_m: official_public
+    draft_m: official_public
+    displacement_t: official_public
+  engineering_estimated:
+    mass_kg: estimated_from_displacement
+    Iz_kgm2: estimated_box_inertia
+    damping: estimated
+    actuator_limits: estimated
+  unavailable_not_public:
+    official_dp_controller: not_public
+    official_thruster_curves: not_public
+    official_fmea: not_public

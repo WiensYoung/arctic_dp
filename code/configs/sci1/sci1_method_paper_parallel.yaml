@@ -1,0 +1,44 @@
+# CPU-parallel paper-small method run for 32-core Linux servers.
+# Recommended command:
+#   OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
+#   PYTHONPATH=src python -m arctic_quasi_dp.sci1.runner \
+#     --config configs/sci1/sci1_method_paper_parallel.yaml \
+#     --out /scratch/arctic_dp/method_paper_parallel \
+#     --jobs 28 --resume --skip-statistics
+profile: paper_small
+seeds: 10
+controllers:
+  - ice_aware
+  - no_safety_filter
+  - fixed_soft_hocbf
+  - cvar_soft_hocbf
+  - no_tail_risk
+  - oracle_full
+  - smc
+  - adrc
+  - leso_adrc
+  - robust_mpc
+  - tube_mpc
+scenarios:
+  include_groups: [A, B, C, D, E, I]
+output:
+  save_traces: false
+  save_traces_on_failure: true
+  trace_downsample: 5
+  save_figures: false
+runtime:
+  jobs: 28
+  parallel_backend: process
+  resume: true
+  skip_statistics: true
+  fail_fast_on_missing_data: true
+statistics:
+  comparisons:
+    - baseline: no_safety_filter
+      candidate: fixed_soft_hocbf
+    - baseline: fixed_soft_hocbf
+      candidate: cvar_soft_hocbf
+    - baseline: no_tail_risk
+      candidate: cvar_soft_hocbf
+    - baseline: ice_aware
+      candidate: cvar_soft_hocbf

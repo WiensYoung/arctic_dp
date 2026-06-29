@@ -1,0 +1,13 @@
+# Ice model sensitivity config
+profile: paper
+seeds: 10
+controllers:
+  - full
+scenarios:
+  include_groups: [G]
+output:
+  root: results/sci1_submission
+  save_traces: true
+  save_figures: true
+runtime:
+  fail_fast: false

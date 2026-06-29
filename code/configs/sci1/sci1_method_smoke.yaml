@@ -1,0 +1,30 @@
+profile: method_smoke
+seeds: 1
+controllers:
+- ice_aware
+- no_safety_filter
+- fixed_soft_hocbf
+- cvar_soft_hocbf
+- adrc
+- robust_mpc
+- tube_mpc
+scenarios:
+  include_ids:
+  - A1_open_water_station_keeping
+  - B2_ice_concentration_jump
+  - I1_safe_boundary_nominal
+  - I2_safe_boundary_ice_impulse
+  - H1_mock_copernicus_fixture
+output:
+  save_traces: true
+  save_figures: false
+runtime:
+  fail_fast_on_missing_data: false
+statistics:
+  comparisons:
+    - baseline: no_safety_filter
+      candidate: fixed_soft_hocbf
+    - baseline: fixed_soft_hocbf
+      candidate: cvar_soft_hocbf
+    - baseline: ice_aware
+      candidate: cvar_soft_hocbf

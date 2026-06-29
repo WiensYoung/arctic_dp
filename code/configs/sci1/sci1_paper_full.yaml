@@ -1,0 +1,44 @@
+profile: paper
+seeds: 50
+controllers:
+- pid
+- smc
+- precision
+- ice_aware
+- fixed_soft_hocbf
+- cvar_soft_hocbf
+- no_safety_filter
+- no_tail_risk
+- full
+- nmpc
+- no_cbf
+- no_cvar
+- no_observer
+- no_fallback
+- oracle_full
+- adrc
+- robust_mpc
+- tube_mpc
+scenarios:
+  include_groups:
+  - A
+  - B
+  - C
+  - D
+  - E
+  - F
+  - G
+  - H
+vessel:
+  config_path: configs/vessels/simplified_500t.yaml
+output:
+  root: results/sci1_submission
+  save_traces: true
+  save_figures: true
+runtime:
+  fail_fast_on_missing_data: true
+protocol: sci1_submission_v3
+simulation:
+  loop: sim_loop_unified
+  ice_model: lindqvist_1989_proxy
+  thruster: generic_dp_vessel

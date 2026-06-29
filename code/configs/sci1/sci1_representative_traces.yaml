@@ -1,0 +1,28 @@
+# Small trace-producing profile for figures after a summary-only paper run.
+profile: method_smoke
+seeds: 1
+controllers:
+  - no_safety_filter
+  - fixed_soft_hocbf
+  - cvar_soft_hocbf
+scenarios:
+  include_ids:
+    - B2_ice_concentration_jump
+    - C4_azimuth_angle_stuck
+    - C7_total_power_limitation
+    - I2_safe_boundary_ice_impulse
+output:
+  save_traces: true
+  trace_downsample: 1
+  save_figures: true
+runtime:
+  jobs: 4
+  parallel_backend: process
+  resume: true
+  fail_fast_on_missing_data: false
+statistics:
+  comparisons:
+    - baseline: no_safety_filter
+      candidate: fixed_soft_hocbf
+    - baseline: fixed_soft_hocbf
+      candidate: cvar_soft_hocbf
