@@ -67,6 +67,37 @@ results/sci1_submission/<timestamp>/
   figures/*.pdf
 ```
 
+## 批量实验的全局 worker 预算
+
+在 `code/` 目录运行：
+
+```bash
+python run_all.py --jobs 28 --out /scratch/arctic_dp
+python run_all.py --phase main --jobs 24 --resume --out /scratch/arctic_dp
+```
+
+`run_all.py --jobs N` 是本次批量运行的全局 CPU worker 预算（正整数，默认 28）。
+每个阶段按配置顺序逐个运行实验，当前实验退出后才启动下一个；当前实验的
+任务级进程池最多使用 N 个 worker，不会再将 N 同时分配给多个实验。
+这保留了单个实验内部的任务级并行。实验任务不足时，部分预算可能空闲。
+预算只涵盖一次 `run_all.py` 调用的实验 worker，不协调其他批量脚本实例，
+也不包含 runner、进程池辅助进程或原生库线程。BLAS/OpenMP 线程默认限制为 1；
+显式设置的环境变量仍然优先。
+
+阶段顺序仍为 `smoke → main → stats → traces`，支持 `--phase` 和 `--skip-smoke`。
+断点续跑默认开启，`--no-resume` 可禁用。smoke 失败会阻止后续阶段；其他必需实验
+失败会在最终返回非零退出码，可选实验失败不影响最终成功状态。启动失败也计为失败。
+Ctrl-C 会停止队列并返回 130；POSIX 上会清理当前实验及其任务 worker 进程组。
+每个实验的日志仍保存在输出根目录的 `logs/<experiment>.log`。
+
+轻量回归测试（不启动仿真实验）：
+
+```bash
+python -m pytest -q tests/sci1/test_run_all.py
+```
+
+此调度约束未经过完整论文实验或服务器负载测量，不代表任何已验证的性能提升幅度。
+
 ## 论文正式实验建议
 
 ```bash
