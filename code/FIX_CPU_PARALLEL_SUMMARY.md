@@ -43,6 +43,24 @@ Target server: 32-core AMD EPYC 9654 Linux node
    - Added `tests/sci1/test_parallel_runner_cli.py`.
    - Covers CLI merge behavior, task hash stability, trace-save policy, and parallel config semantics.
 
+## Batch scheduling follow-up (2026-10-19)
+
+The 24–28 worker recommendation above applies to the total task-worker budget,
+not a separate allocation for every concurrently launched experiment.
+`run_all.py --jobs N` now runs experiments sequentially within each phase and
+passes N to the active experiment's existing task-level process pool. Thus one
+batch invocation has at most N experiment task workers active at once. This does
+not coordinate separate batch invocations or count runner/helper processes and
+native-library threads. Explicit BLAS/OpenMP environment settings remain honored.
+
+Phase selection, resume flags, per-experiment logs, smoke gating, and required
+versus optional failure handling are preserved. Launch errors are recorded as
+failures; interrupted waits stop the current experiment (including its process
+group on POSIX) before propagating the exception. Ctrl-C exits with status 130.
+See `tests/sci1/test_run_all.py` for lightweight scheduling regressions using
+fake processes and tiny Python children, without launching simulations.
+No server-load measurements or performance improvement estimates are claimed.
+
 ## Recommended 32-core run command
 
 ```bash

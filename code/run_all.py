@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""一键并行运行全部实验。
+"""按阶段依次运行实验, 实验内部按任务并行。
 
 用法:
-    # 默认 28 并发, 输出到 /scratch/arctic_dp
+    # 默认全局 28 个 worker, 输出到 results
     python run_all.py
 
-    # 自定义并发数和输出目录
+    # 自定义全局 worker 预算和输出目录
     python run_all.py --jobs 32 --out /scratch/arctic_dp
 
     # 只跑冒烟验证
@@ -25,12 +25,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 
 # ---------- 实验定义 ----------
@@ -185,7 +186,7 @@ EXPERIMENTS: List[Experiment] = [
 ]
 
 
-# ---------- 并行执行器 ----------
+# ---------- 实验队列 ----------
 
 def set_thread_env():
     """限制 BLAS/OpenMP 线程, 防止多进程过度竞争。"""
@@ -197,6 +198,34 @@ def set_thread_env():
         os.environ.setdefault(key, "1")
 
 
+def _stop_experiment(proc: subprocess.Popen):
+    """终止当前实验并回收进程; POSIX 上同时终止其 worker 进程组。"""
+    def send_signal(sig):
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, sig)
+            elif sig == signal.SIGTERM:
+                proc.terminate()
+            else:
+                proc.kill()
+        except ProcessLookupError:
+            pass
+
+    send_signal(signal.SIGTERM)
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        if os.name == "posix":
+            send_signal(signal.SIGKILL)
+        else:
+            proc.kill()
+        proc.wait()
+    finally:
+        # 即使 runner 已退出, 仍清除没有响应 SIGTERM 的 worker。
+        if os.name == "posix":
+            send_signal(signal.SIGKILL)
+
+
 def run_phase(
     experiments: List[Experiment],
     out_root: Path,
@@ -205,9 +234,14 @@ def run_phase(
     log_dir: Path,
     code_dir: Path,
 ) -> dict:
-    """并行运行一个阶段的所有实验, 返回 {name: returncode}。"""
-    procs: dict[str, subprocess.Popen] = {}
-    log_files: dict[str, object] = {}
+    """依次运行实验, 将全局 jobs 预算交给当前实验的任务进程池。
+
+    一个实验退出后才启动下一个, 返回 {name: returncode}。
+    启动失败按非零退出处理; 等待异常或用户中断时清理当前子进程。
+    """
+    if jobs < 1:
+        raise ValueError("jobs must be a positive integer")
+    results: dict[str, int] = {}
 
     for exp in experiments:
         out_dir = out_root / exp.out_subdir
@@ -225,30 +259,39 @@ def run_phase(
         cmd.extend(exp.extra_args)
 
         log_path = log_dir / f"{exp.name}.log"
-        log_fh = open(log_path, "w", encoding="utf-8")
-        log_files[exp.name] = log_fh
-
-        print(f"  [启动] {exp.name}")
+        print(f"  [启动] {exp.name} (worker 预算: {jobs})")
         print(f"         cmd: {' '.join(cmd)}")
         print(f"         log: {log_path}")
 
-        proc = subprocess.Popen(
-            cmd,
-            stdout=log_fh,
-            stderr=subprocess.STDOUT,
-            cwd=str(code_dir),
-            env={**os.environ},
-        )
-        procs[exp.name] = proc
+        with open(log_path, "w", encoding="utf-8") as log_fh:
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=log_fh,
+                    stderr=subprocess.STDOUT,
+                    cwd=str(code_dir),
+                    env={**os.environ},
+                    # Linux 上中断时连同任务 worker 一起清理。
+                    start_new_session=(os.name == "posix"),
+                )
+            except OSError as exc:
+                print(f"  [启动失败] {exp.name}: {exc}")
+                log_fh.write(f"Failed to start experiment: {exc}\n")
+                results[exp.name] = 1
+                continue
 
-    # 等待全部完成
-    results: dict[str, int] = {}
-    for name, proc in procs.items():
-        proc.wait()
-        results[name] = proc.returncode
-        log_files[name].close()
-        status = "✓ 完成" if proc.returncode == 0 else f"✗ 失败 (code={proc.returncode})"
-        print(f"  [{status}] {name}")
+            try:
+                results[exp.name] = proc.wait()
+                if results[exp.name] != 0 and os.name == "posix":
+                    # runner 异常退出时, 避免遗留 worker 与下一个实验重叠。
+                    _stop_experiment(proc)
+            except BaseException:
+                _stop_experiment(proc)
+                raise
+
+        rc = results[exp.name]
+        status = "✓ 完成" if rc == 0 else f"✗ 失败 (code={rc})"
+        print(f"  [{status}] {exp.name}")
 
     return results
 
@@ -256,11 +299,11 @@ def run_phase(
 # ---------- 主流程 ----------
 
 def main():
-    parser = argparse.ArgumentParser(description="一键并行运行全部 Arctic-DP 实验")
+    parser = argparse.ArgumentParser(description="按阶段依次运行 Arctic-DP 实验, 实验内部按任务并行")
     parser.add_argument("--out", type=Path, default=Path("results"),
                         help="输出根目录 (默认: results, 相对于项目根目录)")
     parser.add_argument("--jobs", type=int, default=28,
-                        help="每个实验的 worker 进程数 (默认: 28)")
+                        help="全局 CPU worker 预算, 实验依次运行 (正整数, 默认: 28)")
     parser.add_argument("--resume", action="store_true", default=True,
                         help="断点续跑, 跳过已完成的 task (默认开启)")
     parser.add_argument("--no-resume", action="store_true",
@@ -270,6 +313,8 @@ def main():
     parser.add_argument("--skip-smoke", action="store_true",
                         help="跳过冒烟验证, 直接跑主实验")
     args = parser.parse_args()
+    if args.jobs < 1:
+        parser.error("--jobs must be a positive integer")
 
     resume = not args.no_resume
     code_dir = Path(__file__).resolve().parent
@@ -296,9 +341,9 @@ def main():
         run_phases.remove("smoke")
 
     print("=" * 60)
-    print(" Arctic-DP 全量并行实验")
+    print(" Arctic-DP 全量实验队列")
     print(f" 输出目录: {out_root}")
-    print(f" 并发数:   {args.jobs}")
+    print(f" 全局 worker 预算: {args.jobs} (实验依次运行)")
     print(f" 断点续跑: {'是' if resume else '否'}")
     print(f" 执行阶段: {' → '.join(run_phases)}")
     print(f" 日志目录: {log_dir}")
@@ -376,4 +421,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)
